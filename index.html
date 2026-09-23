@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TTOP · Technical Team Operations Portal</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛠️</text></svg>">
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/responsive.css">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+
+<!-- ============ SIGN-IN GATE ============ -->
+<!-- Covers the whole app until Google sign-in + admin approval succeed. See js/auth.js. -->
+<div class="auth-gate" id="authGate"><div class="auth-card" id="authGateCard"></div></div>
+
+<!-- ============ SIDEBAR ============ -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar__brand">
+    <span class="sidebar__logo">🛠️</span>
+    <span class="sidebar__brandname">TTOP</span>
+  </div>
+  <nav class="sidebar__nav">
+    <a href="#" class="nav-link is-active" data-page="dashboard"><span class="nav-link__icon">🏠</span><span class="nav-link__text">Dashboard</span></a>
+    <a href="#" class="nav-link" data-page="assessments"><span class="nav-link__icon">📝</span><span class="nav-link__text">Assessments</span></a>
+    <a href="#" class="nav-link" data-page="interviews"><span class="nav-link__icon">📅</span><span class="nav-link__text">Interviews</span></a>
+    <a href="#" class="nav-link" data-page="candidates"><span class="nav-link__icon">🧑‍💻</span><span class="nav-link__text">Candidates</span></a>
+    <a href="#" class="nav-link" data-page="incentives"><span class="nav-link__icon">💰</span><span class="nav-link__text">Incentives</span></a>
+    <a href="#" class="nav-link" data-page="team"><span class="nav-link__icon">🧑‍💼</span><span class="nav-link__text">Team</span></a>
+    <a href="#" class="nav-link" data-page="reports"><span class="nav-link__icon">📊</span><span class="nav-link__text">Reports</span></a>
+    <a href="#" class="nav-link is-hidden" data-page="admin" id="navAdminLink"><span class="nav-link__icon">🛡️</span><span class="nav-link__text">Admin</span></a>
+    <a href="#" class="nav-link" data-page="settings"><span class="nav-link__icon">⚙️</span><span class="nav-link__text">Settings</span></a>
+  </nav>
+  <button class="sidebar__collapse" id="sidebarToggle" title="Collapse sidebar">‹</button>
+</aside>
+
+<!-- ============ MAIN ============ -->
+<div class="main">
+
+  <!-- ---------- HEADER ---------- -->
+  <header class="topbar">
+    <button class="mobile-menu-btn" id="mobileMenuToggle">☰</button>
+    <h1 class="topbar__title" id="pageTitle">Dashboard</h1>
+
+    <div class="global-search">
+      <input type="search" id="globalSearchInput" placeholder="Search candidates, clients, POCs...">
+      <div class="search-results" id="globalSearchResults"></div>
+    </div>
+
+    <div class="topbar__actions">
+      <button type="button" class="sync-pill" id="syncPill" title="Click to sync with Google Sheets now">☁️ <span id="syncPillText">Sync</span></button>
+      <label class="theme-switch" title="Toggle dark / light mode">
+        <input type="checkbox" id="themeToggle">
+        <span class="theme-switch__track"><span class="theme-switch__thumb">🌙</span></span>
+      </label>
+
+      <div class="notification-wrap">
+        <button class="icon-btn icon-btn--bell" id="notificationBell">🔔<span class="badge-dot is-hidden" id="notificationBadge"></span></button>
+        <div class="notification-panel" id="notificationPanel">
+          <div class="notification-panel__head">Notifications</div>
+          <div id="notificationList"></div>
+        </div>
+      </div>
+
+      <div class="user-chip">
+        <span class="user-chip__avatar" id="currentUserAvatar">K</span>
+        <span class="user-chip__name" id="currentUserName">Karthik</span>
+      </div>
+      <button class="icon-btn" id="signOutBtn" title="Sign out">🚪</button>
+    </div>
+  </header>
+
+  <!-- ---------- PAGE: DASHBOARD ---------- -->
+  <main class="page is-active" id="page-dashboard">
+    <div class="welcome-banner">Welcome back 👋 Here's what's happening across your candidates today.</div>
+
+    <section class="summary-cards" id="summaryCards"></section>
+
+    <div id="todayAlertHost"></div>
+
+    <section class="panel">
+      <div class="panel__head"><h2>Today's Interviews</h2></div>
+      <div class="schedule-section" id="todayInterviews"></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel__head"><h2>Tomorrow</h2></div>
+      <div class="schedule-section" id="tomorrowInterviews"></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel__head"><h2>Day After Tomorrow</h2></div>
+      <div class="schedule-section" id="dayAfterInterviews"></div>
+    </section>
+
+    <div class="two-col">
+      <section class="panel">
+        <div class="panel__head"><h2>My Work</h2>
+          <select id="myWorkPerson" class="select-sm"></select>
+        </div>
+        <div class="mywork-stats" id="myWorkStats"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel__head"><h2>Today's Progress</h2></div>
+        <div id="todaysProgress"></div>
+        <div class="achievement-list" id="achievementBadges"></div>
+      </section>
+    </div>
+
+    <div class="two-col">
+      <section class="panel">
+        <div class="panel__head"><h2>Incentive Summary</h2></div>
+        <div id="incentiveLeaderboardDashHost">
+          <div class="leaderboard" id="incentiveLeaderboardDash"></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel__head"><h2>Recent Activity</h2></div>
+        <div class="activity-feed" id="activityFeed"></div>
+      </section>
+    </div>
+  </main>
+
+  <!-- ---------- PAGE: ASSESSMENTS ---------- -->
+  <main class="page" id="page-assessments">
+    <section class="panel">
+      <div class="panel__head"><h2>Assessment Dashboard</h2></div>
+      <div class="two-col">
+        <div class="chart-card">
+          <h4>By Type</h4>
+          <div id="chartByType" class="bar-chart"></div>
+        </div>
+        <div class="chart-card chart-card--center">
+          <h4>Pending vs Completed</h4>
+          <div id="chartByStatus" class="donut-wrap"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel__head">
+        <h2>Assessment Records</h2>
+        <button class="btn btn--primary" id="btnAddAssessment">+ Add Assessment</button>
+      </div>
+
+      <div class="filter-bar" id="assessmentsFilterBar">
+        <input type="search" id="assessmentSearch" placeholder="Search candidate, client, role...">
+        <select id="asFilterType"><option value="">All Types</option><option>Take Home</option><option>Portal</option><option>Coding Assessment</option></select>
+        <select id="asFilterStatus"><option value="">All Statuses</option><option>Assessment Pending</option><option>Assessment Completed</option><option>Ongoing Interview</option><option>Upcoming Interview</option><option>Interview Completed</option></select>
+        <select id="asFilterClient"></select>
+        <button class="btn btn--ghost" id="asClearFilters">Clear Filters</button>
+      </div>
+
+      <div class="table-wrap">
+        <table class="data-table" id="assessmentsTable">
+          <thead>
+            <tr>
+              <th data-sort="date">Date ⇅</th><th data-sort="type">Type ⇅</th><th data-sort="candidateName">Candidate ⇅</th>
+              <th>Tech/Role</th><th>Interview Date</th><th data-sort="client">Client ⇅</th>
+              <th data-sort="status">Status ⇅</th><th>Folder</th><th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="assessmentsTableBody"></tbody>
+        </table>
+      </div>
+      <div class="pager" id="assessmentsPager"></div>
+    </section>
+  </main>
+
+  <!-- ---------- PAGE: INTERVIEWS ---------- -->
+  <main class="page" id="page-interviews">
+    <section class="panel">
+      <div class="panel__head">
+        <h2>Interview Calendar (Next 7 Days)</h2>
+        <button class="btn btn--primary" id="btnAddInterview">+ Add Interview</button>
+      </div>
+      <div class="calendar-grid" id="calendarGrid"></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel__head"><h2>All Interview Records</h2></div>
+      <div class="filter-bar" id="interviewsFilterBar">
+        <input type="search" id="interviewSearch" placeholder="Search candidate, client, round...">
+        <select id="ivFilterStatus"><option value="">All Statuses</option><option>Upcoming Interview</option><option>Ongoing Interview</option><option>Interview Completed</option><option>Cancelled</option></select>
+        <select id="ivFilterClient"></select>
+        <select id="ivFilterRound"></select>
+        <button class="btn btn--ghost" id="ivClearFilters">Clear Filters</button>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>Candidate</th><th>Client</th><th>Date</th><th>Time</th><th>Round</th><th>Tool Drive</th><th>Call Support</th><th>Technical POC</th><th>Status</th><th>Placement</th><th>Actions</th></tr></thead>
+          <tbody id="interviewsTableBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- ---------- PAGE: CANDIDATES ---------- -->
+  <main class="page" id="page-candidates">
+    <section class="panel">
+      <div class="panel__head">
+        <h2>Candidates</h2>
+        <button class="btn btn--primary" id="btnAddCandidate">+ Add Candidate</button>
+      </div>
+      <div class="filter-bar">
+        <input type="search" id="candidateSearch" placeholder="Search candidate, domain, location...">
+      </div>
+      <div class="candidates-grid" id="candidatesGrid"></div>
+    </section>
+  </main>
+
+  <!-- ---------- PAGE: INCENTIVES ---------- -->
+  <main class="page" id="page-incentives">
+    <section class="mini-cards" id="incentiveSummaryCards"></section>
+
+    <div class="two-col">
+      <section class="panel">
+        <div class="panel__head"><h2>Leaderboard</h2></div>
+        <div class="leaderboard" id="incentiveLeaderboard"></div>
+      </section>
+      <section class="panel">
+        <div class="panel__head"><h2>How incentives are calculated</h2></div>
+        <ul class="rules-list">
+          <li>Same client, subsequent round (2→3, 3→4...) → <strong>₹500</strong> to the Tool Drive person</li>
+          <li>Round 1 → Round 2 progression → <strong>₹100</strong> to the Tool Drive person</li>
+          <li>Final round + Placed → <strong>₹2,000</strong> Tool Drive + <strong>₹2,000</strong> Candidate POC (₹4,000 combined if same person)</li>
+        </ul>
+      </section>
+    </div>
+
+    <section class="panel">
+      <div class="panel__head"><h2>Incentive History</h2></div>
+      <div class="filter-bar">
+        <input type="search" id="incSearch" placeholder="Search candidate, client...">
+        <select id="incFilterPerson"></select>
+        <select id="incFilterClient"></select>
+        <select id="incFilterType"></select>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>Date</th><th>Candidate</th><th>Client</th><th>Round</th><th>Reason</th><th>Tool Drive</th><th>Candidate POC</th><th class="text-right">Amount</th><th>Status</th></tr></thead>
+          <tbody id="incentiveHistoryBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- ---------- PAGE: TEAM ---------- -->
+  <main class="page" id="page-team">
+    <section class="panel">
+      <div class="panel__head">
+        <h2>Candidate POC Team</h2>
+        <button class="btn btn--primary" id="btnAddCandidatePoc">+ Add Candidate POC</button>
+      </div>
+      <p class="muted"><strong>Technical POC.</strong> Each candidate is assigned one member of this team, once, on the candidate profile — it is not asked again when adding interviews. They are also credited on placement incentives.</p>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th></th><th>Name</th><th>Email</th><th>Linked Candidates</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="candidatePocTeamBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel__head">
+        <h2>Support Team</h2>
+        <button class="btn btn--primary" id="btnAddSupportMember">+ Add Support Member</button>
+      </div>
+      <p class="muted">Used for <strong>Tool Drive</strong> and <strong>Call Support</strong> on interviews.</p>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th></th><th>Name</th><th>Email</th><th>Linked Records</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="supportTeamBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- ---------- PAGE: REPORTS ---------- -->
+  <main class="page" id="page-reports">
+    <section class="panel">
+      <div class="panel__head"><h2>Reports</h2></div>
+      <div id="reportsContent"></div>
+    </section>
+  </main>
+
+  <!-- ---------- PAGE: ADMIN (admins only) ---------- -->
+  <main class="page" id="page-admin">
+    <section class="panel">
+      <div class="panel__head">
+        <h2>User Approvals</h2>
+        <button class="btn btn--ghost" id="btnRefreshUsers">↻ Refresh</button>
+      </div>
+      <p class="muted">Anyone who signs in with Google shows up here as <strong>pending</strong> until an admin approves them. Role/Status can also be edited directly in the "Users" sheet in your Google Sheets workbook.</p>
+      <div id="adminUsersHost"></div>
+    </section>
+  </main>
+
+  <!-- ---------- PAGE: SETTINGS ---------- -->
+  <main class="page" id="page-settings">
+    <section class="panel">
+      <div class="panel__head"><h2>Data &amp; Backup</h2></div>
+      <p class="muted">Candidates, interviews and incentives are stored in this browser's local storage. All six data sets are also kept in sync with a Google Sheets workbook (see Settings below). Use the tools here to back up or restore this browser's data.</p>
+      <div class="settings-actions">
+        <button class="btn btn--secondary" id="btnExportJSON">⬇️ Export JSON</button>
+        <button class="btn btn--secondary" id="btnExportCSV">⬇️ Export Assessments CSV</button>
+        <button class="btn btn--secondary" id="btnImportJSON">⬆️ Import JSON</button>
+        <input type="file" id="importFileInput" accept="application/json" hidden>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel__head"><h2>Google Drive &amp; Sheets</h2></div>
+      <span class="status-badge status-badge--live" id="driveModeBadge">🟢 Live – saving to Google Drive &amp; Sheets</span>
+      <p class="muted">Assessment file uploads are saved to Google Drive, and your data is synced with a Google Sheets workbook, through a small Apps Script web app (see <code>apps-script/README.md</code>). The connection is already set up; change it here only if you redeploy the Apps Script.</p>
+      <div class="form-grid settings-drive">
+        <div class="form-group"><label>Apps Script Web App URL</label><input type="url" id="driveEndpointInput" placeholder="https://script.google.com/macros/s/.../exec"></div>
+        <div class="form-group"><label>Secret</label><input type="password" id="driveSecretInput" placeholder="Same value as SECRET in Code.gs" autocomplete="off"></div>
+      </div>
+      <div class="settings-actions">
+        <button class="btn btn--primary" id="btnSaveDrive">Save</button>
+        <button class="btn btn--ghost" id="btnClearDrive">Restore default connection</button>
+      </div>
+
+      <h4 class="profile-subhead">Workbook sync</h4>
+      <p class="muted">Candidates, Assessments, Interviews, Incentives, Candidate POC Team and Support Team are kept in one Google Sheets workbook (one sheet each). Changes made here appear in the workbook within a few seconds; rows you add, edit or delete in the workbook appear here within about 30 seconds — or press <strong>Sync now</strong>.</p>
+      <div class="settings-actions">
+        <button class="btn btn--secondary" id="btnSyncNow">🔄 Sync now</button>
+        <span class="muted" id="syncSettingsStatus">Not synced yet</span>
+        <a class="btn btn--ghost" id="syncWorkbookLink" href="#" target="_blank" rel="noopener" hidden>Open workbook ↗</a>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel__head"><h2>Future Integrations</h2></div>
+      <div class="integration-grid">
+        <div class="integration-card"><span class="integration-card__icon">📊</span><strong>Google Sheets</strong><span class="badge badge--green">Live</span></div>
+        <div class="integration-card"><span class="integration-card__icon">📁</span><strong>Google Drive</strong><span class="badge badge--green">Live</span></div>
+        <div class="integration-card"><span class="integration-card__icon">📆</span><strong>Google Calendar</strong><span class="badge badge--amber">Ready for API Integration</span></div>
+        <div class="integration-card"><span class="integration-card__icon">✉️</span><strong>Gmail / Notifications</strong><span class="badge badge--amber">Ready for API Integration</span></div>
+      </div>
+      <p class="muted">Google Sheets (two-way) and Drive (file uploads) are connected. Calendar and Gmail notifications are not connected yet.</p>
+    </section>
+  </main>
+
+</div>
+
+<!-- ============ MOBILE BOTTOM NAV ============ -->
+<nav class="mobile-nav">
+  <a href="#" class="mobile-nav__link is-active" data-page="dashboard">🏠</a>
+  <a href="#" class="mobile-nav__link" data-page="assessments">📝</a>
+  <a href="#" class="mobile-nav__link" data-page="interviews">📅</a>
+  <a href="#" class="mobile-nav__link" data-page="candidates">🧑‍💻</a>
+  <a href="#" class="mobile-nav__link" data-page="incentives">💰</a>
+</nav>
+
+<!-- ============ MODALS ============ -->
+
+<!-- Add/Edit Assessment -->
+<div class="overlay" id="assessmentModalOverlay">
+  <div class="modal modal--lg">
+    <div class="modal__head">
+      <h3 id="assessmentModalTitle">Add Assessment</h3>
+      <button class="modal__close" id="assessmentModalClose">✕</button>
+    </div>
+    <form id="assessmentForm" class="modal__body">
+      <div class="form-grid">
+        <div class="form-group"><label>Date of Assessment *</label><input type="date" name="date" required></div>
+        <div class="form-group"><label>Type *</label>
+          <select name="type" required><option>Take Home</option><option>Portal</option><option>Coding Assessment</option></select>
+        </div>
+        <div class="form-group"><label>Candidate Name *</label><input type="text" name="candidateName" required list="assessmentCandidateList" placeholder="e.g. Kautik Saridey"><datalist id="assessmentCandidateList"></datalist></div>
+        <div class="form-group"><label>Technology/Role</label><input type="text" name="techRole" placeholder="e.g. React / Node.js"></div>
+        <div class="form-group"><label>Company/Client *</label><input type="text" name="client" required placeholder="e.g. Radford University"></div>
+        <div class="form-group"><label>Interview Date</label><input type="date" name="interviewDate"></div>
+        <div class="form-group"><label>Status *</label>
+          <select name="status" required>
+            <option>Assessment Pending</option><option>Assessment Completed</option><option>Ongoing Interview</option><option>Upcoming Interview</option><option>Interview Completed</option>
+          </select>
+        </div>
+      </div>
+      <h4 class="profile-subhead">Files &amp; Drive Links</h4>
+      <p class="muted form-help">Upload a file (it is saved to Google Drive and the link is filled in for you) or paste an existing Drive link.</p>
+      <div class="upload-note" id="uploadRequirementNote" hidden></div>
+      <div class="form-grid" id="assessmentFileFields"></div>
+      <div class="modal__foot">
+        <button type="button" class="btn btn--ghost" id="assessmentModalCancel">Cancel</button>
+        <button type="submit" class="btn btn--primary">Save Assessment</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Add/Edit Interview -->
+<div class="overlay" id="interviewModalOverlay">
+  <div class="modal modal--lg">
+    <div class="modal__head">
+      <h3 id="interviewModalTitle">Add Interview</h3>
+      <button class="modal__close" id="interviewModalClose">✕</button>
+    </div>
+    <form id="interviewForm" class="modal__body">
+      <div class="form-grid">
+        <div class="form-group"><label>Candidate Name *</label><input type="text" name="candidateName" required list="candidateNamesList"></div>
+        <datalist id="candidateNamesList"></datalist>
+        <div class="form-group"><label>Client *</label><input type="text" name="client" required></div>
+        <div class="form-group"><label>Interview Date *</label><input type="date" name="interviewDate" required></div>
+        <div class="form-group"><label>Interview Time *</label><input type="text" name="interviewTime" required placeholder="7:30 PM IST"></div>
+        <div class="form-group"><label>Duration</label><input type="text" name="duration" placeholder="60 Minutes"></div>
+        <div class="form-group"><label>Round *</label>
+          <select name="round" required>
+            <option>1st Round</option><option>2nd Round</option><option>2nd Round – Final Round</option>
+            <option>3rd Round</option><option>3rd Round – Final Round</option><option>Final Round</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Interview Type *</label>
+          <select name="interviewType" required>
+            <option>Recruiter</option><option>Technical</option><option>Hiring Manager</option><option>Leadership</option>
+            <option>Director</option><option>Coding</option><option>System Design</option><option>Assessment</option>
+            <option>Presentation</option><option>Cultural Fit</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Interviewer</label><input type="text" name="interviewer"></div>
+        <div class="form-group"><label>Done By (Tool Drive)</label><input type="text" name="doneBy" placeholder="Type the name, e.g. Karthik" autocomplete="off"></div>
+        <div class="form-group"><label>Call Support</label><select name="assignedPOC"></select></div>
+        <div class="form-group"><label>Preparation Status</label>
+          <select name="preparationStatus"><option>Not Started</option><option>In Progress</option><option>Mock Call Done</option><option>Completed</option></select>
+        </div>
+        <div class="form-group"><label>Interview Status</label>
+          <select name="interviewStatus"><option>Upcoming Interview</option><option>Ongoing Interview</option><option>Interview Completed</option><option>Cancelled</option></select>
+        </div>
+        <div class="form-group"><label>Placement Status</label>
+          <select name="placementStatus"><option>Pending</option><option>Placed</option><option>Not Placed</option></select>
+        </div>
+      </div>
+      <div class="linked-assessment" id="linkedAssessmentBox" hidden>
+        <h4 class="profile-subhead">Linked Assessment *</h4>
+        <div class="linked-assessment__row">
+          <select name="assessmentId"></select>
+          <button type="button" class="btn btn--secondary btn--sm" id="btnEnterAssessmentDetails">＋ Enter assessment details</button>
+        </div>
+        <div class="linked-msg" id="linkedAssessmentMsg"></div>
+      </div>
+      <div class="assignment-hint" id="assignmentHint"></div>
+      <div class="modal__foot">
+        <button type="button" class="btn btn--ghost" id="interviewModalCancel">Cancel</button>
+        <button type="submit" class="btn btn--primary">Save Interview</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Add/Edit Candidate -->
+<div class="overlay" id="candidateModalOverlay">
+  <div class="modal">
+    <div class="modal__head">
+      <h3 id="candidateModalTitle">Add Candidate</h3>
+      <button class="modal__close" id="candidateModalClose">✕</button>
+    </div>
+    <form id="candidateForm" class="modal__body">
+      <div class="form-grid">
+        <div class="form-group"><label>Candidate Name *</label><input type="text" name="name" required></div>
+        <div class="form-group"><label>Email</label><input type="email" name="email"></div>
+        <div class="form-group"><label>Phone</label><input type="text" name="phone"></div>
+        <div class="form-group"><label>Location</label><input type="text" name="location"></div>
+        <div class="form-group"><label>Experience</label><input type="text" name="experience" placeholder="e.g. 4 yrs"></div>
+        <div class="form-group"><label>Assigned Domains</label><input type="text" name="assignedDomains" placeholder="e.g. Full Stack / React"></div>
+        <div class="form-group"><label>Technical POC (Candidate POC Team)</label><select name="candidatePOC"></select></div>
+        <div class="form-group"><label>Marketing POC</label><input type="text" name="marketingPOC" placeholder="Enter a name"></div>
+        <div class="form-group"><label>Active Status</label><select name="activeStatus"><option>Active</option><option>Inactive</option></select></div>
+      </div>
+      <div class="modal__foot">
+        <button type="button" class="btn btn--ghost" id="candidateModalCancel">Cancel</button>
+        <button type="submit" class="btn btn--primary">Save Candidate</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Candidate Profile -->
+<div class="overlay" id="candidateProfileOverlay">
+  <div class="modal modal--lg">
+    <div class="modal__head">
+      <h3 id="candidateProfileTitle">Candidate</h3>
+      <button class="modal__close" id="candidateProfileClose">✕</button>
+    </div>
+    <div class="modal__body" id="candidateProfileBody"></div>
+  </div>
+</div>
+
+<!-- Generic View modal (assessment / interview) -->
+<div class="overlay" id="viewModalOverlay">
+  <div class="modal modal--lg">
+    <div class="modal__head">
+      <h3 id="viewModalTitle">Details</h3>
+      <button class="modal__close" id="viewModalClose">✕</button>
+    </div>
+    <div class="modal__body" id="viewModalBody"></div>
+  </div>
+</div>
+
+<!-- Assessment details required (Assessment / Presentation interviews) -->
+<div class="overlay" id="assessmentPromptOverlay">
+  <div class="modal modal--sm">
+    <div class="modal__head"><h3>📝 Assessment details needed</h3></div>
+    <div class="modal__body"><p class="prompt__message"></p></div>
+    <div class="modal__foot">
+      <button class="btn btn--ghost prompt__cancel">Cancel</button>
+      <button class="btn btn--secondary prompt__skip">Save without linking</button>
+      <button class="btn btn--primary prompt__enter">Enter assessment details</button>
+    </div>
+  </div>
+</div>
+
+<!-- Assign Tool Drive / Call Support from an interview card -->
+<div class="overlay" id="assignOverlay">
+  <div class="modal modal--sm">
+    <div class="modal__head"><div><h3 class="assign__title">Assign</h3><div class="muted assign__sub"></div></div></div>
+    <div class="modal__body"><div class="form-group assign__field"></div></div>
+    <div class="modal__foot">
+      <button class="btn btn--ghost assign__cancel">Cancel</button>
+      <button class="btn btn--primary assign__save">Assign</button>
+    </div>
+  </div>
+</div>
+
+<!-- Duplicate detection -->
+<div class="overlay" id="duplicateOverlay">
+  <div class="modal modal--sm">
+    <div class="modal__head"><h3>⚠️ Possible Duplicate</h3></div>
+    <div class="modal__body">
+      <p class="duplicate__message">Similar record already exists.</p>
+    </div>
+    <div class="modal__foot">
+      <button class="btn btn--ghost duplicate__cancel">Cancel</button>
+      <button class="btn btn--secondary duplicate__view">View Existing</button>
+      <button class="btn btn--primary duplicate__continue">Continue Anyway</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add/Edit Team Member (Candidate POC or Support) -->
+<div class="overlay" id="teamMemberModalOverlay">
+  <div class="modal modal--sm">
+    <div class="modal__head">
+      <h3 id="teamMemberModalTitle">Add Team Member</h3>
+      <button class="modal__close" id="teamMemberModalClose">✕</button>
+    </div>
+    <form id="teamMemberForm" class="modal__body">
+      <div class="form-grid">
+        <div class="form-group"><label>Team</label><input type="text" name="teamLabel" disabled></div>
+        <div class="form-group"><label>Name *</label><input type="text" name="name" required></div>
+        <div class="form-group"><label>Email</label><input type="email" name="email"></div>
+        <div class="form-group"><label>Status</label><select name="activeStatus"><option>Active</option><option>Inactive</option></select></div>
+      </div>
+      <div class="modal__foot">
+        <button type="button" class="btn btn--ghost" id="teamMemberModalCancel">Cancel</button>
+        <button type="submit" class="btn btn--primary">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Generic confirm dialog -->
+<div class="overlay" id="confirmOverlay">
+  <div class="modal modal--sm">
+    <div class="modal__head"><h3 class="confirm__title">Are you sure?</h3></div>
+    <div class="modal__body"><p class="confirm__message">This action cannot be undone.</p></div>
+    <div class="modal__foot">
+      <button class="btn btn--ghost confirm__no">Cancel</button>
+      <button class="btn btn--danger confirm__yes">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toasts -->
+<div class="toast-host" id="toastHost"></div>
+
+<script src="js/utils.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/data.js"></script>
+<script src="js/incentives.js"></script>
+<script src="js/drive.js"></script>
+<script src="js/sync.js"></script>
+<script src="js/assessments.js"></script>
+<script src="js/interviews.js"></script>
+<script src="js/candidates.js"></script>
+<script src="js/dashboard.js"></script>
+<script src="js/admin.js"></script>
+<script src="js/app.js"></script>
+<script src="js/auth.js"></script>
+</body>
+</html>
