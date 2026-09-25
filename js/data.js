@@ -17,15 +17,9 @@
 const DefaultTeam = (() => {
 
   const supportTeam = [
-    { id: "SUP-1", name: "Karthik", email: "karthik@ttop.internal", activeStatus: "Active" },
-    { id: "SUP-2", name: "Gopi", email: "gopi@ttop.internal", activeStatus: "Active" },
-    { id: "SUP-3", name: "Vamsi", email: "vamsi@ttop.internal", activeStatus: "Active" }
   ];
 
   const candidatePocTeam = [
-    { id: "CPOC-1", name: "Kumar", email: "kumar@ttop.internal", activeStatus: "Active" },
-    { id: "CPOC-2", name: "Pavan", email: "pavan@ttop.internal", activeStatus: "Active" },
-    { id: "CPOC-3", name: "Dilip", email: "dilip@ttop.internal", activeStatus: "Active" }
   ];
 
   return { supportTeam, candidatePocTeam };
