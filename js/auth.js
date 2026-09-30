@@ -20,7 +20,7 @@
 
 const Auth = (() => {
   // TODO: paste your OAuth Client ID here (must match GOOGLE_CLIENT_ID in Code.gs)
-  const CLIENT_ID = "PASTE-YOUR-GOOGLE-OAUTH-CLIENT-ID.apps.googleusercontent.com";
+  const CLIENT_ID = "25189368573-snib59kq3qs7s36m81k7dhd740pqimh2.apps.googleusercontent.com";
 
   const SESSION_KEY = "ttop_session";
   let onReady = null;
