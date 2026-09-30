@@ -16,7 +16,7 @@ const Drive = (() => {
   const MAX_BYTES = 20 * 1024 * 1024; // Apps Script request payload is limited; 20 MB is a safe ceiling
 
   // Built-in connection (must match SECRET in the deployed Code.gs)
-  const DEFAULT_ENDPOINT = "https://script.google.com/macros/s/AKfycbwmM2EXXXlI1WuZXViqYU5uxPP08TJfj9KcM512a8ZfE5V1Q5KiMgUm7_Z7A4n73KrU/exec";
+  const DEFAULT_ENDPOINT = "https://script.google.com/macros/s/AKfycbykuR22KMQhBMuRD4xa6atGWyzXgP5asYvel6vUFj06Qj06nI7RrsWm7WFzJN4I6gJA/exec";
   const DEFAULT_SECRET = "CandidateAssessmentsTracker";
 
   function config() {
