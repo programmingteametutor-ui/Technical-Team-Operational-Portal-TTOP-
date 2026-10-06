@@ -166,7 +166,7 @@ A=as.map(a=>({id:'A'+a.id,cand:cm.get(a.candidate_id),type:a.type,tech:a.tech_ro
 OT.length=0;al.forEach(r=>OT.push({id:-r.id,cand:r.candidate,role:r.role||'',client:r.client,date:r.interview_date,time:r.interview_time.slice(0,5),dur:r.duration_minutes+' Minutes',round:r.round,type:r.interview_type,status:r.interview_status,pocName:r.technical_poc||'',td:'',cs1:'',cs2:'',prep:'',source:'',assess:'',placement:'—',prev:'',notes:''}));
 log=lg.map(l=>({t:new Date(l.at).toLocaleString(),who:l.actor_name||l.actor_email||'',a:l.action,db:1}));
 users.length=0;pr.forEach(p=>users.push({email:p.email,name:p.name||p.email,role:p.role=='admin'?'Admin':'User',ok:p.approved,ok0:p.approved,db:1}));
-await loadInc();SNAP={c:{},a:{},i:{}};C.forEach(c=>SNAP.c[c.id]=JSON.stringify(cp(c)));A.forEach(a=>SNAP.a[a.id]=JSON.stringify(ap_(a)));I.forEach(i=>SNAP.i[i.id]=JSON.stringify(ip(i)));sy='✓ Saved to database'}
+await loadInc();SNAP={c:{},a:{},i:{},t:{}};team.forEach(t=>SNAP.t[t.id]=JSON.stringify(tp(t)));C.forEach(c=>SNAP.c[c.id]=JSON.stringify(cp(c)));A.forEach(a=>SNAP.a[a.id]=JSON.stringify(ap_(a)));I.forEach(i=>SNAP.i[i.id]=JSON.stringify(ip(i)));sy='✓ Saved to database'}
 // Write-through: the UI edits memory, then persist() sends only what changed. A failed save is retried.
 async function sync(arr,tb,mp,sn,remap,fid){for(const x of arr){const p=mp(x);if(('candidate_id' in p&&p.candidate_id==null)||(tb=='interviews'&&!p.client_id))continue;
 if(!x.db){const r=await SB.from(tb).insert(p).select('id').single();if(r.error)throw r.error;const o=x.id;x.id=fid?fid(r.data.id):r.data.id;x.db=1;sn[x.id]=JSON.stringify(p);if(remap)remap(o,x.id)}
@@ -175,18 +175,26 @@ if(tb=='candidates')for(const id of Object.keys(sn))if(!arr.some(x=>x.id==id)){c
 async function persist(){if(busy){again=1;return}busy=1;sy='↻ Saving…';upd_sy();
 try{do{again=0;
 for(const n of clients)if(!CID[n]){const r=await SB.from('clients').insert({name:n}).select().single();if(r.error)throw r.error;CID[n]=r.data.id}
-for(const t of team.filter(t=>!t.db)){const r=await SB.from('team_members').insert({name:t.name,email:t.email,is_technical_poc:!!t.poc,is_tool_drive:!!t.td,is_call_support:!!t.cs}).select().single();if(r.error)throw r.error;t.id=r.data.id;t.db=1}
+for(const t of team.filter(t=>!t.db)){const r=await SB.from('team_members').insert({name:t.name,email:t.email,is_technical_poc:!!t.poc,is_tool_drive:!!t.td,is_call_support:!!t.cs}).select().single();if(r.error)throw r.error;t.id=r.data.id;t.db=1;SNAP.t[t.id]=JSON.stringify(tp(t))}
+for(const t of team.filter(t=>t.db)){const q=tp(t);if(SNAP.t[t.id]!==JSON.stringify(q)){const r=await SB.from('team_members').update(q).eq('id',t.id);if(r.error)throw r.error;SNAP.t[t.id]=JSON.stringify(q)}}
 await sync(C,'candidates',cp,SNAP.c);
 await sync(A,'assessments',ap_,SNAP.a,(o,n)=>I.forEach(i=>{if(i.assess==o)i.assess=n}),n=>'A'+n);
 await sync(I,'interviews',ip,SNAP.i,(o,n)=>I.forEach(i=>{if(i.prev==o)i.prev=n}));
 for(const l of log.filter(l=>!l.db)){const r=await SB.from('activity_log').insert({actor_email:me.email,actor_name:me.name,action:l.a});if(r.error)throw r.error;l.db=1}
 for(const u of users.filter(u=>u.db&&u.ok&&!u.ok0)){const r=await SB.from('profiles').update({approved:true}).eq('email',u.email);if(r.error)throw r.error;u.ok0=1}
-}while(again);await loadInc();sy='✓ Saved to database';if(cur=='inc')render()}
+}while(again);await loadInc();sy='✓ Saved to database';if(cur=='inc'||cur=='team')render()}
 catch(e){sy='⚠ Not saved yet: '+e.message+' (retrying)';setTimeout(persist,15000)}
 busy=0;upd_sy()}
 function login(msg){$('#app').innerHTML=`<div class="lg"><div class="card"><h2>TTOP Portal</h2><p class="mu">Sign in with your Google account. New users wait for admin approval.</p><button class="p blk" onclick="gsi()">Sign in with Google</button>${msg?`<p class="er">${msg}</p>`:''}</div></div>`}
 const gsi=()=>SB.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin}});
 P.set=()=>`<h2>Settings</h2><div class="card"><p>Signed in as <b>${me.email}</b> (${me.role}).</p><p>Database: <span class="pill Completed">Supabase connected</span></p><p class="mu">Google Sheet sync and Drive folders need a server job. They are not set up in this version.</p></div>`;
+const tp=t=>({name:t.name,email:t.email,is_technical_poc:!!t.poc,is_tool_drive:!!t.td,is_call_support:!!t.cs}),
+tf=()=>{const u=users.find(u=>u.email==$('#te').value);if(u&&!$('#tn').value)$('#tn').value=u.name},
+ta=()=>{const n=$('#tn').value.trim(),e=$('#te').value.trim().toLowerCase();if(!n||!e)return toast('Name and email are required');if(team.some(t=>t.email.toLowerCase()==e))return toast('That email is already on the team');
+team.push({id:++cid,name:n,email:e,poc:+$('#t_p').checked,td:+$('#t_d').checked,cs:+$('#t_c').checked});L('Added team member '+n);saved();render()},
+tg=(id,k,v)=>{const t=team.find(x=>x.id==id);t[k]=+v;L(`Updated ${t.name}: ${{poc:'Technical POC',td:'Tool Drive',cs:'Call Support'}[k]} ${v?'on':'off'}`);saved()};
+P.team=()=>{const cb=(t,k)=>`<input type="checkbox" ${t[k]?'checked':''} onchange="tg(${t.id},'${k}',this.checked)">`;
+return `<h2>Team</h2><div class="card"><b>Add team member</b><div class="fg"><label>Name<input id="tn"></label><label>Email (same as their Google login)<input id="te" list="tu" oninput="tf()"></label><datalist id="tu">${users.map(u=>`<option value="${u.email}">${u.name}</option>`).join('')}</datalist></div><div class="row"><label><input type="checkbox" id="t_p"> Technical POC</label><label><input type="checkbox" id="t_d"> Tool Drive</label><label><input type="checkbox" id="t_c"> Call Support</label><button class="p" onclick="ta()">Add member</button></div></div>`+tbl([['Name',t=>t.name],['Email',t=>t.email],['Technical POC',t=>cb(t,'poc')],['Tool Drive',t=>cb(t,'td')],['Call Support',t=>cb(t,'cs')]],team)+`<h3>User approvals</h3>`+tbl([['User',u=>u.name],['Email',u=>u.email],['Role',u=>u.role],['Status',u=>u.ok?pill('Approved'):`<button class="p" onclick="ap('${u.email}')">Approve</button>`]],users)};
 async function boot(){try{const c=window.TTOP_CONFIG||{};if(!c.url||!c.anon)return login('Supabase is not configured. Add the Supabase integration (or the two env vars) in Vercel and redeploy.');
 SB=supabase.createClient(c.url,c.anon);const{data:{session}}=await SB.auth.getSession();if(!session)return login();
 const{data:p,error}=await SB.from('profiles').select('*').eq('id',session.user.id).single();if(error||!p)return login('Could not load your profile: '+(error?error.message:'not found'));
