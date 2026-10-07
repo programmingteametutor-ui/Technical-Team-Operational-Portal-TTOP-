@@ -48,8 +48,10 @@ const icard=i=>`<div class="card ${tc(i.type)}"><b>${i.cand}</b> ${i.status=='Re
 /* ---------- Related interviews / assessments ---------- */
 const rn=r=>nm(String(r||'').replace(/\(.*$/,'')),
 rlOk=x=>x.status!='Rescheduled'&&x.status!='Cancelled',
-rlO=i=>{const k=rn(i.role);if(!k)return[];return I.concat(OT).filter(x=>x.id!=i.id&&nm(x.cand)!=nm(i.cand)&&x.client==i.client&&rn(x.role)==k&&rlOk(x)&&sk(x)<sk(i)).sort((a,b)=>(a.round==i.round?0:1)-(b.round==i.round?0:1)||(sk(a)<sk(b)?1:-1))},
-rlP=i=>I.concat(OT).filter(x=>x.id!=i.id&&nm(x.cand)==nm(i.cand)&&x.client==i.client&&rlOk(x)).sort(srt),
+/* I + OT without repeats: in Admin's User view the same interview sits in both lists (OT id = -I id), and a record can also be saved twice */
+rlAll=()=>{const ids=new Set(I.map(x=>String(x.id))),seen=new Set();return I.concat(OT).filter(x=>{if(x.id<0&&ids.has(String(-x.id)))return false;const k=[nm(x.cand),nm(x.client),x.round,x.date,x.time,x.status].join('|');if(seen.has(k))return false;seen.add(k);return true})},
+rlO=i=>{const k=rn(i.role);if(!k)return[];return rlAll().filter(x=>x.id!=i.id&&nm(x.cand)!=nm(i.cand)&&x.client==i.client&&rn(x.role)==k&&rlOk(x)&&sk(x)<sk(i)).sort((a,b)=>(a.round==i.round?0:1)-(b.round==i.round?0:1)||(sk(a)<sk(b)?1:-1))},
+rlP=i=>rlAll().filter(x=>x.id!=i.id&&nm(x.cand)==nm(i.cand)&&x.client==i.client&&rlOk(x)).sort(srt),
 rlA=i=>{const k=rn(i.role);return A.filter(a=>a.id==i.assess||(nm(a.cand)==nm(i.cand)&&(!a.client||a.client==i.client))||(k&&nm(a.cand)!=nm(i.cand)&&a.client==i.client&&rn(a.tech)==k))},
 rlC=i=>{if(i.status=='Rescheduled')return'';const o=rlO(i),p=rlP(i).filter(x=>sk(x)<sk(i)),a=rlA(i);if(!o.length&&!p.length&&!a.length)return'';
 const sr=o.filter(x=>x.round==i.round),sh=sr.length?sr:o,ln=x=>`<div>• ${esc(x.cand)} · ${x.round} · ${x.date||'Date TBD'} · ${x.status}${poc(x)?' · '+esc(poc(x)):''}</div>`;
