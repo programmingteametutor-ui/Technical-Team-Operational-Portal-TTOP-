@@ -468,8 +468,9 @@ return `<div class="fbar"><input type="search" id="bf_q" placeholder="Search can
 bfr=()=>{const e=$('#bpt');if(!e)return;e.innerHTML=bpt();e.classList.remove('anim');if(e.querySelectorAll('tr').length<=61){void e.offsetWidth;e.classList.add('anim')}bpn()},
 bfq=v=>{BF.q=v;clearTimeout(bft);bft=setTimeout(bfr,100)},bfs=k=>{BF.st=k;document.querySelectorAll('[data-bf]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.bf==k));bfr()},bfc=()=>{BF={q:'',st:'all',cl:'',dt:''};bpr()};
 
+const bpNorm=l=>l.replace(/\)\s*-(?=[^\s-])/g,') - ').replace(/([A-Za-z])-(?=\s*\d{1,2}(?::\d{2}|\s*[ap]\.?m\b))/gi,'$1 - ').replace(/([^\s-])-[ \t]+(?=\S)/g,'$1 - ').replace(/(\s)-(?=[^\s-])/g,' - ').replace(/[ \t]{2,}/g,' ');
 function bpp(){const names=[...new Set(['gopi','pavan','kumar','kishore','vamsi','dilip','karthik',...team.map(t=>t.name.split(' ')[0].toLowerCase())])],tre=new RegExp('(?:^|[^a-z])('+names.join('|')+')(?![a-z])','i'),sep='\\s*(?:[–—-]{2,}|[–—]|\\s-\\s)\\s*',rows=[],clx=[],rmap=new Map();BPMC.clear();let date=($('#bi_d')||{}).value||TODAY,mg=0;
-$('#bi').value.split('\n').forEach(ln=>{ln=ln.replace(/^\s*\d{1,3}\s*[.)]?\s*\t\s*/,'').replace(/^\s*\d{1,3}\s*[.)]\s+/,'').trim();const iv=/interview/i.test(ln)||(/\b(phn|phone|call)\b/i.test(ln)&&TR.test(ln)),hd=/^([a-z]{3})[a-z]*\s+(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{4})?/i.exec(ln);
+$('#bi').value.split('\n').forEach(ln=>{ln=ln.replace(/^\s*\d{1,3}\s*[.)]?\s*\t\s*/,'').replace(/^\s*\d{1,3}\s*[.)]\s+/,'').trim();ln=bpNorm(ln);const iv=/interview/i.test(ln)||(/\b(phn|phone|call)\b/i.test(ln)&&TR.test(ln)),hd=/^([a-z]{3})[a-z]*\s+(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{4})?/i.exec(ln);
 if(hd&&!iv&&MO.includes(hd[1].toLowerCase())){date=(hd[3]||new Date().getFullYear())+'-'+pad(MO.indexOf(hd[1].toLowerCase())+1)+'-'+pad(+hd[2]);return}
 const m=new RegExp(sep).exec(ln);if(!iv||!m)return;
 const s0=ln.slice(0,m.index),rest=ln.slice(m.index+m[0].length),par=[...s0.matchAll(/\(([^)]*)\)/g)].map(x=>x[1].trim()),
@@ -479,8 +480,8 @@ tt=TR.exec(rest),hr=/(\d+(?:\.\d+)?)\s*(?:hrs?|hours?)\b/i.exec(rest),mn=/(\d+)\
 rd=/final/i.test(rest)?'Final':/\bloop\b/i.test(rest)?'Loop':(x=>x?'Round '+x[1]:'')(/(\d)\s*(?:st|nd|rd|th)?\s*round/i.exec(rest)),
 tdm=tre.exec(rest),notes=tdm?rest.slice(tdm.index+tdm[0].length).replace(/\d{1,2}\/\d{1,2}(\/\d{2,4})?/g,'').replace(/^[\s>\-–—→]+|[\s>\-–—→]+$/g,'').trim():'',
 type=/\bon\s*-?site/i.test(rest)?'Onsite':/coding/i.test(rest)?'Coding':/system design/i.test(rest)?'System Design':/technical/i.test(rest)?'Technical':/director/i.test(rest)?'Director':/\b(vp|cto|ceo|head|leadership)\b/i.test(rest)?'Leadership':/manager|panel/i.test(rest)?'Hiring Manager':'Technical';
-const pcs=ln.split(new RegExp(sep)).map(x=>x.trim()),isCall=pcs.some(x=>/^(?:phn|phone)?\s*call$/i.test(x)||/^(?:phn|phone)\b/i.test(x)),ex_=[...rest.matchAll(/\(([^)]*)\)/g)].map(x=>x[1].trim()).filter(x=>x&&!/round|^(?:loop|final)$|^\d+\s*mins?\b/i.test(x)&&!/^elaborated/i.test(x)&&!CT.test(x));let time='';if(tt){let h=+tt[1];const p=tt[3].toLowerCase();if(p=='p'&&h<12)h+=12;if(p=='a'&&h==12)h=0;time=pad(h)+':'+(tt[2]||'00')}
-const r={sel:1,cand:tcase(s0.replace(/\(.*$/,'')),role:par.find(x=>!CT.test(x))||'',loc:par.find(x=>CT.test(x))||'',client,date,time,dur:(mins||60)+' Minutes',round:rd,type,td:'',poc:tdm?(pfind(tdm[1])||{name:tcase(tdm[1])}).name:'',prep:/elaborated/i.test(rest)?'Done':'Pending',notes:[notes,isCall?'Phone call':'',...ex_].filter(Boolean).join(' · '),fl:[]},
+const pcs=ln.split(new RegExp(sep)).map(x=>x.trim()),isCall=pcs.some(x=>/^(?:phn|phone)?\s*call$/i.test(x)||/^(?:phn|phone)\b/i.test(x)),ex_=[...rest.matchAll(/\(([^)]*)\)/g)].map(x=>x[1].trim()).filter(x=>x&&!/round|^(?:loop|final)$|^\d+\s*mins?\b/i.test(x)&&!/^el[ao]bor/i.test(x)&&!CT.test(x));let time='';if(tt){let h=+tt[1];const p=tt[3].toLowerCase();if(p=='p'&&h<12)h+=12;if(p=='a'&&h==12)h=0;time=pad(h)+':'+(tt[2]||'00')}
+const r={sel:1,cand:tcase(s0.replace(/\(.*$/,'').replace(/[\s-]*(?:phn\s*|phone\s*)?interview\w*\s*$/i,'').replace(/[\s-]+$/,'')),role:par.find(x=>!CT.test(x))||'',loc:par.find(x=>CT.test(x))||'',client,date,time,dur:(mins||60)+' Minutes',round:rd,type,td:'',poc:tdm?(pfind(tdm[1])||{name:tcase(tdm[1])}).name:'',prep:/\bel[ao]bor\w*/i.test(rest)?'Done':'Pending',notes:[notes,isCall?'Phone call':'',...ex_].filter(Boolean).join(' · '),fl:[]},
 o=rmap.get(nm(r.cand)+'|'+nm(r.client)+'|'+date+'|'+time);
 if(o){mg++;if(!o.fl.includes('Merged duplicate line'))o.fl.push('Merged duplicate line');if(!o.poc)o.poc=r.poc;if(r.prep=='Done')o.prep='Done';if(!o.notes)o.notes=r.notes;if(!o.round)o.round=r.round}else{rows.push(r);rmap.set(nm(r.cand)+'|'+nm(r.client)+'|'+date+'|'+time,r);if(!clx.includes(r.client))clx.push(r.client)}});
 if(!rows.length)return $('#bp').innerHTML='<p class="er">No interview lines found. Paste the list including the date headings.</p>';
@@ -524,12 +525,13 @@ regen();const ad_=sl.length-skd;L(`Imported ${ad_} interviews from doc${skd?', '
 
 async function bpFile(inp){const fs=[...inp.files];if(!fs.length)return;try{const t=await Promise.all(fs.map(f=>f.text()));$('#bi').value=t.join('\n\n');inp.value='';toast('Reading '+$('#bi').value.split('\n').length+' lines, please wait…');await new Promise(r=>setTimeout(r,60));bpp();toast(`Loaded ${fs.length} file${fs.length>1?'s':''}, check the preview below`)}catch(e){toast('Could not read the file')}}
 function bpAll(){if(!BP.length)return toast('Nothing to import');const tp=isA()?(($('#bp_poc')||{}).value||BPT||''):((myT()||{}).name||'');if(!isA()&&!tp)return toast('Your login is not linked to a team member');
-let add=0,skd=0,nc=0,rsn=0,dp=0,oth=0;const rvw=[],rv1=(r,kind,extra)=>rvw.push({...prPay(r),rsId:'',kind,iid:'',xid:'',notes:r.notes||'',...extra,fl:[],sel:0,id:'n'+(++prn),db:0,by:me.name,reason:{dupe:'dupe',newc:'cand'}[kind]||'fix'}),act=x=>x.status!='Rescheduled'&&x.status!='Cancelled',ek=(c,cl,rd)=>nm(c)+'|'+nm(cl)+'|'+rd,
+let add=0,skd=0,nc=0,rsn=0,dp=0,oth=0,miss=0;const rvw=[],rv1=(r,kind,extra)=>rvw.push({...prPay(r),rsId:'',kind,iid:'',xid:'',notes:r.notes||'',...extra,fl:[],sel:0,id:'n'+(++prn),db:0,by:me.name,reason:{dupe:'dupe',newc:'cand'}[kind]||'fix'}),act=x=>x.status!='Rescheduled'&&x.status!='Cancelled',ek=(c,cl,rd)=>nm(c)+'|'+nm(cl)+'|'+rd,
 cmap=new Map(),byR=new Map(),exact=new Set(),pend=new Set(),pdone=new Set(),cset=new Set(clients.map(nm));
 C.forEach(c=>{const k=nm(c.name);if(!cmap.has(k))cmap.set(k,c)});
 const reg=x=>{const k=ek(x.cand,x.client,x.round);if(!act(x))return;if(!byR.has(k))byR.set(k,[]);byR.get(k).push(x);if(x.status=='Date Pending')pend.add(k);else exact.add(k+'|'+x.date+'|'+x.time)};
 I.forEach(reg);
-BP.forEach(r=>{const cn=nm(r.cand);let c=cmap.get(cn);
+BP.forEach(r=>{if(!r.cand||!r.client||!r.date){miss++;rv1(r,'skip',{msg:'Not imported: '+(!r.client?'client':!r.cand?'candidate':'date')+' is missing in the list. Fix the line and import it again'});return}
+const cn=nm(r.cand);let c=cmap.get(cn);
 if(c&&!mine(c)){oth++;rv1(r,'skip',{msg:'Not imported: belongs to another Technical POC'});return}
 if(!isA()&&r.poc&&!c&&r.poc!=tp){oth++;rv1(r,'skip',{msg:'Not imported: belongs to another Technical POC'});return}
 const noT=!r.time,st=noT?'Date Pending':(r.date<TODAY?'Completed':'Scheduled'),k=ek(r.cand,r.client,r.round);
@@ -542,7 +544,7 @@ const n={id:++iid,cand:c.name,role:r.role,client:r.client,date:noT?'':r.date,tim
 I.push(n);if(o){o.status='Rescheduled';rsn++}else if(x)rv1(r,'dupe',{iid:n.id,xid:x.id});if(noT)rv1(r,'time',{iid:n.id});reg(n);add++});
 if(rvw.length){PR.push(...rvw)}
 regen();L(`Imported ${add} interviews from doc${nc?', '+nc+' new candidates':''}${skd?', '+skd+' skipped (identical already exists)':''}`);BP=[];saved();go(rvw.length?'rev':'int');
-toast(`Imported ${add} interviews${nc?', '+nc+' new candidates created (add their details later)':''}${rsn?', '+rsn+' rescheduled':''}${dp?', '+dp+' same-round entries kept as separate interviews':''}${skd?', '+skd+' skipped (identical already exists)':''}${oth?', '+oth+' skipped (other POC)':''}${rvw.length?'. '+rvw.length+' follow-up items are on the Import Review page':''}. Saving to the database…`)}
+toast(`Imported ${add} interviews${nc?', '+nc+' new candidates created (add their details later)':''}${rsn?', '+rsn+' rescheduled':''}${dp?', '+dp+' same-round entries kept as separate interviews':''}${skd?', '+skd+' skipped (identical already exists)':''}${oth?', '+oth+' skipped (other POC)':''}${miss?', '+miss+' not imported (client, candidate or date missing)':''}${rvw.length?'. '+rvw.length+' follow-up items are on the Import Review page':''}. Saving to the database…`)}
 function buildOT(){if(!isAdm())return;OT.length=0;if(isA())return;const s=names();I.filter(i=>!s.has(nm(i.cand))).forEach(i=>OT.push({id:-i.id,cand:i.cand,role:i.role||'',client:i.client,date:i.date||'',time:i.time||'',dur:i.dur,round:i.round,type:i.type,status:i.status,pocName:poc(i),td:'',cs1:'',cs2:'',prep:i.prep||'',source:'',assess:'',placement:'—',prev:'',notes:''}))}
 function sw(v){if(!isAdm())return;VW=v;try{localStorage.setItem('ttop_view_'+me.email,v)}catch(e){}buildOT();const adminOnly=NAV.some(n=>n[0]==cur&&n[2]);if(v=='User'&&adminOnly)cur='dash';go(cur)}
 
