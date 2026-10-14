@@ -579,10 +579,10 @@ let m=pool.filter(c=>{const Q=strip(c.name).split(' ');return Q.length>=2&&(cove
 if(m.length>1&&hint){const h=m.filter(c=>c.poc==hint);if(h.length)m=h}
 if(m.length>1){const e=m.filter(c=>strip(c.name).split(' ')[0]==P[0]);if(e.length==1)m=e}
 return m.length==1?{c:m[0],fuzzy:1}:m.length?{amb:m}:{}}
-const SUF=/\b(inc|llc|ltd|limited|corp|corporation|co|company|technologies|technology|tech|group|pvt|plc|the)\b/g,ckey=s=>strip(s).replace(SUF,' ').replace(/ /g,'');
+const dbKey=s=>String(s||'').toLowerCase().replace(/\b(inc|llc|ltd|limited|corp|corporation|co|company|technologies|technology|tech|group|pvt|plc|the)\b/g,' ').replace(/[^a-z0-9]+/g,''),SUF=/\b(inc|llc|ltd|limited|corp|corporation|co|company|technologies|technology|tech|group|pvt|plc|the)\b/g,ckey=s=>strip(s).replace(SUF,' ').replace(/ /g,'');
 /* Returns the client name already in the system when the typed one is the same apart from case, spaces, punctuation or Inc/LLC/Ltd */
 function clientCanon(name,extra){const n=(name||'').trim(),k=ckey(n);if(!k)return n;const all=[...clients,...(extra||[])].filter(Boolean);
-return all.find(c=>nm(c)==nm(n))||all.find(c=>ckey(c)==k)||(k.length>=6&&all.find(c=>{const q=ckey(c);return q.length>=6&&lev(q,k)<=1}))||n}
+return all.find(c=>nm(c)==nm(n))||all.find(c=>ckey(c)==k||dbKey(c)==dbKey(n))||(k.length>=6&&all.find(c=>{const q=ckey(c);return q.length>=6&&lev(q,k)<=1}))||n}
 const BPMC=new Map();let BPLIM=200;
 function bpm(r){r.fl=r.fl.filter(f=>!f.startsWith('Name matched')&&!f.startsWith('Several candidates')&&!f.startsWith('Did you mean'));r.amb=0;r.sug=[];const mk=C.length+'|'+strip(r.cand)+'|'+(r.poc||'');let me_=BPMC.get(mk);if(!me_){const m0=candFind(r.cand,C,r.poc);me_={m:m0,sug:(m0.c||m0.amb)?[]:candSuggest(r.cand,C,r.poc)};if(BPMC.size>20000)BPMC.clear();BPMC.set(mk,me_)}const m=me_.m;
 if(m.c){if(nm(m.c.name)!=nm(r.cand)){r.fl.push('Name matched to '+m.c.name);r.cand=m.c.name}return m.c}
@@ -800,7 +800,7 @@ async function delCands(){const have=new Set(C.map(x=>String(x.id))),sn=SNAP.c,g
 async function persist(){if(busy){again=1;return}busy=1;sy='↻ Saving…';upd_sy();
 try{do{again=0;
 for(const n of clients)if(!CID[n]){let r=await SB.from('clients').insert({name:n}).select().single();
-if(r.error&&r.error.code==='23505'){const q=await SB.from('clients').select('id,name'),f=(q.data||[]).find(c=>nm(c.name)==nm(n)||ckey(c.name)==ckey(n));if(f)r={data:f}}
+if(r.error&&r.error.code==='23505'){const q=await SB.from('clients').select('id,name'),f=(q.data||[]).find(c=>nm(c.name)==nm(n)||ckey(c.name)==ckey(n)||(dbKey(n)&&dbKey(c.name)==dbKey(n)));if(f)r={data:f};else{const er=new Error('Client "'+n+'" clashes with an existing client name. Rename it (for example in the import Edit) and save again');er.code='23505';throw er}}
 if(r.error)throw r.error;CID[n]=r.data.id;if(r.data.name&&r.data.name!=n)CID[r.data.name]=r.data.id}
 for(const t of team.filter(t=>!t.db)){const r=await SB.from('team_members').insert({name:t.name,email:t.email,is_technical_poc:!!t.poc,is_tool_drive:!!t.td,is_call_support:!!t.cs}).select().single();if(r.error)throw r.error;t.id=r.data.id;t.db=1;SNAP.t[t.id]=JSON.stringify(tp(t))}
 for(const t of team.filter(t=>t.db)){const q=tp(t);if(SNAP.t[t.id]!==JSON.stringify(q)){const r=await SB.from('team_members').update(q).eq('id',t.id);if(r.error)throw r.error;SNAP.t[t.id]=JSON.stringify(q)}}
