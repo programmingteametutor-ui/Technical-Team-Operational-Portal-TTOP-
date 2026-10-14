@@ -785,7 +785,9 @@ for(const x of lt)await one(x);
 async function delCands(){const have=new Set(C.map(x=>String(x.id))),sn=SNAP.c,gone=Object.keys(sn).filter(id=>!have.has(id));for(let i=0;i<gone.length;i+=150){const ch=gone.slice(i,i+150);sy='↻ Deleting candidates '+Math.min(i+150,gone.length)+' / '+gone.length;upd_sy();const r=await SB.from('candidates').delete().in('id',ch.map(Number));if(r.error){if(r.error.code==='23503'){toast('Cannot delete: these candidates have incentives. Mark them inactive instead.');await loadAll();render();return}throw r.error}ch.forEach(id=>delete sn[id])}}
 async function persist(){if(busy){again=1;return}busy=1;sy='↻ Saving…';upd_sy();
 try{do{again=0;
-for(const n of clients)if(!CID[n]){const r=await SB.from('clients').insert({name:n}).select().single();if(r.error)throw r.error;CID[n]=r.data.id}
+for(const n of clients)if(!CID[n]){let r=await SB.from('clients').insert({name:n}).select().single();
+if(r.error&&r.error.code==='23505'){const q=await SB.from('clients').select('id,name'),f=(q.data||[]).find(c=>nm(c.name)==nm(n)||ckey(c.name)==ckey(n));if(f)r={data:f}}
+if(r.error)throw r.error;CID[n]=r.data.id;if(r.data.name&&r.data.name!=n)CID[r.data.name]=r.data.id}
 for(const t of team.filter(t=>!t.db)){const r=await SB.from('team_members').insert({name:t.name,email:t.email,is_technical_poc:!!t.poc,is_tool_drive:!!t.td,is_call_support:!!t.cs}).select().single();if(r.error)throw r.error;t.id=r.data.id;t.db=1;SNAP.t[t.id]=JSON.stringify(tp(t))}
 for(const t of team.filter(t=>t.db)){const q=tp(t);if(SNAP.t[t.id]!==JSON.stringify(q)){const r=await SB.from('team_members').update(q).eq('id',t.id);if(r.error)throw r.error;SNAP.t[t.id]=JSON.stringify(q)}}
 await sync(C,'candidates',cp,SNAP.c);
