@@ -12,8 +12,12 @@
 // Test without saving anything: /api/sync-doc?dry=1 (with the secret).
 
 const DOC_ID = process.env.TTOP_DOC_ID || '18_X3ibtvERFdu1_A_LFIoB9_mU6DeR2EXguuOpJJsOo';
-const SB_URL = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
-const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+// Finds the Supabase settings under any name: SUPABASE_URL, NEXT_PUBLIC_SUPABASE_URL, or a prefixed
+// name the Vercel integration may create (e.g. STORAGE_SUPABASE_URL, TTOP_SUPABASE_SERVICE_ROLE_KEY).
+const envFind = (...ends) => { const e = process.env; for (const n of ends) if (e[n]) return e[n];
+  for (const n of ends) { const k = Object.keys(e).find(k => k.endsWith('_' + n) && e[k]); if (k) return e[k] } return '' };
+const SB_URL = envFind('SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_API_URL').replace(/\/$/, '');
+const SB_KEY = envFind('SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SERVICE_KEY', 'SERVICE_ROLE_KEY');
 const SECRET = process.env.CRON_SECRET || '';
 
 /* ---------- Supabase REST (no dependencies) ---------- */
@@ -215,7 +219,8 @@ const summary = (S, when) => [
 
 module.exports = async (req, res) => {
   const dry = !!(req.query && (req.query.dry == '1' || req.query.dry == 'true'));
-  if (!SB_URL || !SB_KEY) return res.status(500).json({ ok: false, error: 'SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is missing in Vercel' });
+  if (!SB_URL || !SB_KEY) return res.status(500).json({ ok: false, error: [!SB_URL && 'SUPABASE_URL', !SB_KEY && 'SUPABASE_SERVICE_ROLE_KEY'].filter(Boolean).join(' and ') + ' not found in Vercel. Add it under Project > Settings > Environment Variables (Production), then Redeploy.' });
+  if (/^eyJ/.test(SB_KEY)) { try { const role = JSON.parse(Buffer.from(SB_KEY.split('.')[1], 'base64').toString()).role; if (role && role !== 'service_role') return res.status(500).json({ ok: false, error: 'SUPABASE_SERVICE_ROLE_KEY holds the "' + role + '" key. Use the service_role key from Supabase > Project Settings > API.' }) } catch (e) { } }
   const who = await allowed(req);
   if (!who) return res.status(401).json({ ok: false, error: 'Not allowed' });
   const started = new Date();
