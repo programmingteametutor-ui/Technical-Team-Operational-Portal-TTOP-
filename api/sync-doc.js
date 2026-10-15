@@ -2,15 +2,13 @@
 // Called at 6:00 AM and 6:00 PM IST by Supabase pg_cron (see doc_sync_setup.sql),
 // or from the portal's "Sync now" button (admins only).
 // It reads the Google Doc as plain text, imports only lines it has never imported before,
-// records the run in sync_runs and sends a Telegram message with the sync date and time.
+// and records the run in sync_runs, which the portal shows as a notification with the date and time.
 //
 // Environment variables (Vercel > Project > Settings > Environment Variables):
 //   SUPABASE_URL                 (set by the Vercel Supabase integration)
 //   SUPABASE_SERVICE_ROLE_KEY    (set by the Vercel Supabase integration; server-only, never in the browser)
 //   CRON_SECRET                  any long random text; the same value goes into doc_sync_setup.sql
 //   TTOP_DOC_ID                  optional, defaults to the Sirian Interview Tracker doc
-//   TELEGRAM_BOT_TOKEN           optional, from @BotFather
-//   TELEGRAM_CHAT_ID             optional, one or more chat ids separated by commas
 // Test without saving anything: /api/sync-doc?dry=1 (with the secret).
 
 const DOC_ID = process.env.TTOP_DOC_ID || '18_X3ibtvERFdu1_A_LFIoB9_mU6DeR2EXguuOpJJsOo';
@@ -105,13 +103,6 @@ function parseDoc(text, team, clientNames, today) {
   return rows;
 }
 
-/* ---------- Telegram ---------- */
-async function notify(text) {
-  const tok = process.env.TELEGRAM_BOT_TOKEN, ids = (process.env.TELEGRAM_CHAT_ID || '').split(',').map(s => s.trim()).filter(Boolean);
-  if (!tok || !ids.length) return false;
-  for (const id of ids) { try { await fetch(`https://api.telegram.org/bot${tok}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: id, text }) }) } catch (e) { } }
-  return true;
-}
 
 /* ---------- Who is calling: cron secret or a signed-in admin ---------- */
 async function allowed(req) {
@@ -217,7 +208,7 @@ async function runSync(dry) {
 }
 
 const summary = (S, when) => [
-  `✅ Interview doc synced`, `📅 ${when}`,
+  `Sheet updated at ${when}`,
   `New interviews: ${S.added}${S.rescheduled ? ` (${S.rescheduled} rescheduled)` : ''} · Times filled: ${S.updated} · Already in portal: ${S.already}`,
   `New candidates: ${S.newCands} · Date pending: ${S.pending} · Import Review: ${S.review}${S.failed ? ` · Failed: ${S.failed}` : ''}`
 ].join('\n');
@@ -233,14 +224,12 @@ module.exports = async (req, res) => {
     if (!dry) {
       await rest('sync_runs', { method: 'POST', body: { ok: true, added: S.added, updated: S.updated, skipped: S.already, new_candidates: S.newCands, review: S.review, failed: S.failed, triggered_by: who, message: msg, error: S.errors.slice(0, 20).join('\n') || null }, prefer: 'return=minimal' });
       await rest('activity_log', { method: 'POST', body: { actor_email: 'auto-sync', actor_name: 'Auto sync', action: `Doc sync (${when}): ${S.added} added, ${S.updated} times filled, ${S.newCands} new candidates, ${S.review} to review` }, prefer: 'return=minimal' }).catch(() => { });
-      await notify(msg);
     }
     return res.status(200).json({ ok: true, dry, when, ...S, message: msg, sample });
   } catch (e) {
     const when = istStamp(started);
     if (!dry) {
-      await rest('sync_runs', { method: 'POST', body: { ok: false, triggered_by: who, error: e.message, message: `⚠️ Interview doc sync FAILED\n📅 ${when}\n${e.message}` }, prefer: 'return=minimal' }).catch(() => { });
-      await notify(`⚠️ Interview doc sync FAILED\n📅 ${when}\n${e.message}`);
+      await rest('sync_runs', { method: 'POST', body: { ok: false, triggered_by: who, error: e.message, message: `Sheet update FAILED at ${when}\n${e.message}` }, prefer: 'return=minimal' }).catch(() => { });
     }
     return res.status(500).json({ ok: false, when, error: e.message });
   }
