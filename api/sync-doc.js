@@ -140,7 +140,7 @@ async function runSync(dry) {
   for (const row of rows) {
     const key = [nk(row.cand), ckey(row.client), row.round, row.date, row.time].join('|');
     if (seen.has(key)) { S.already++; continue }
-    if (!row.cand || !row.client || !row.date) { rv(row, 'skip', { msg: 'Not imported: ' + (!row.client ? 'client' : !row.cand ? 'candidate' : 'date') + ' is missing in the doc line' }); seen.add(key); seenAdd.push({ key }); continue }
+    if (!row.cand || !row.client || !row.date) { rv(row, 'skip', { msg: 'Not imported: ' + (!row.client ? 'client' : !row.cand ? 'candidate' : 'date') + ' is missing in the doc line' }); seen.add(key); seenAdd.push({ key, action: 'skipped' }); continue }
 
     // candidate (never duplicated: same matching as the portal)
     let c = candFind(row.cand, C, row.poc).c, newc = false;
@@ -159,7 +159,7 @@ async function runSync(dry) {
     }
     const noT = !row.time, mine = I.filter(x => x.candidate_id == c.id && x.client_id == cl.id && x.round == row.round);
     // already in the portal in any status (so a cancelled or deleted interview is not brought back)
-    if (mine.find(x => noT ? !x.interview_date : x.interview_date == row.date && x.interview_time == row.time)) { S.already++; seen.add(key); seenAdd.push({ key }); continue }
+    { const ex = mine.find(x => noT ? !x.interview_date : x.interview_date == row.date && x.interview_time == row.time); if (ex) { S.already++; seen.add(key); seenAdd.push({ key, action: 'already', interview_id: ex.id > 0 ? ex.id : null }); continue } }
 
     const act = mine.filter(x => !['Rescheduled', 'Cancelled'].includes(x.interview_status) && roleEq(x.role, row.role));
     const x = row.round == 'Loop' ? null : act[0], status = noT ? 'Date Pending' : row.date < today ? 'Completed' : 'Scheduled';
@@ -167,7 +167,7 @@ async function runSync(dry) {
     if (x && x.interview_status == 'Date Pending' && !noT) {
       if (!dry) await rest(`interviews?id=eq.${x.id}`, { method: 'PATCH', body: { interview_date: row.date, interview_time: row.time, interview_status: status } });
       Object.assign(x, { interview_date: row.date, interview_time: row.time, interview_status: status });
-      S.updated++; seen.add(key); seenAdd.push({ key, interview_id: x.id > 0 ? x.id : null }); continue;
+      S.updated++; seen.add(key); seenAdd.push({ key, action: 'updated', interview_id: x.id > 0 ? x.id : null }); continue;
     }
     const rs = x && /resched/i.test(row.notes || '') && ['Scheduled', 'Date Pending', 'Completed'].includes(x.interview_status) ? x : null;
     const body = {
@@ -183,7 +183,7 @@ async function runSync(dry) {
   // insert new interviews in batches (falls back to one at a time if a batch is refused)
   const done = (p, id) => {
     p.ph.id = id; S.added++; if (p.rs) { S.rescheduled++ } if (!p.body.interview_date) S.pending++;
-    seenAdd.push({ key: p.key, interview_id: id > 0 ? id : null });
+    seenAdd.push({ key: p.key, action: p.rs ? 'rescheduled' : 'added', interview_id: id > 0 ? id : null });
     if (p.dupeOf) rv(p.row, 'dupe', { iid: id, xid: p.dupeOf.id });
     if (!p.body.interview_date) rv(p.row, 'time', { iid: id });
     if (p.newc) rv(p.row, 'newc', {});
@@ -195,12 +195,12 @@ async function runSync(dry) {
     try { const d = await rest('interviews?select=id', { method: 'POST', body: ch.map(p => p.body), prefer: 'return=representation' }); if (d && d.length == ch.length) { ch.forEach((p, j) => done(p, d[j].id)); ok = true } } catch (e) { }
     if (!ok) for (const p of ch) {
       try { const d = await rest('interviews?select=id', { method: 'POST', body: p.body, prefer: 'return=representation' }); done(p, d[0].id) }
-      catch (e) { S.failed++; S.errors.push(p.row.cand + ' · ' + p.row.client + ': ' + e.message); rv(p.row, 'skip', { msg: 'Not imported: ' + e.message }); seenAdd.push({ key: p.key }) }
+      catch (e) { S.failed++; S.errors.push(p.row.cand + ' · ' + p.row.client + ': ' + e.message); rv(p.row, 'skip', { msg: 'Not imported: ' + e.message }); seenAdd.push({ key: p.key, action: 'failed' }) }
     }
   }
   if (!dry) {
     for (const p of plans) if (p.rs && p.ph.id > 0) await rest(`interviews?id=eq.${p.rs.id}`, { method: 'PATCH', body: { interview_status: 'Rescheduled' } });
-    for (let i = 0; i < seenAdd.length; i += 500) await rest('doc_sync_lines?on_conflict=key', { method: 'POST', body: seenAdd.slice(i, i + 500), prefer: 'resolution=ignore-duplicates,return=minimal' });
+    for (let i = 0; i < seenAdd.length; i += 500) await rest('doc_sync_lines?on_conflict=key', { method: 'POST', body: seenAdd.slice(i, i + 500).map(x => ({ interview_id: null, ...x, run_at: now.toISOString() })), prefer: 'resolution=ignore-duplicates,return=minimal' });
     for (let i = 0; i < review.length; i += 300) { try { await rest('import_review', { method: 'POST', body: review.slice(i, i + 300), prefer: 'return=minimal' }) } catch (e) { S.errors.push('Import Review: ' + e.message) } }
   }
   S.review = review.length;
