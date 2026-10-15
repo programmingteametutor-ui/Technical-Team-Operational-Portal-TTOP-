@@ -71,6 +71,8 @@ const istDate = ms => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata
 const istStamp = d => new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }).format(d) + ' IST';
 
 /* ---------- Doc parser (same rules as "Import from Google Doc" in the portal) ---------- */
+const prepOf = () => 'Pending';   // Prep always starts as Pending; the team updates it in the portal
+const IVR = /\b(?:i?nterv[a-z]*|intrview\w*|intervew\w*)\b/i;
 const TR = /(\d{1,2})(?:\s*[:.]\s*(\d{2}))?\s*([ap])\.?m\b/i, MO = 'jan feb mar apr may jun jul aug sep oct nov dec'.split(' '), CT = /^\(?(uk|ireland|us|usa|canada|australia|uae|india)\)?$/i;
 const bpNorm = l => l.replace(/\)\s*-(?=[^\s-])/g, ') - ').replace(/([A-Za-z])-(?=\s*\d{1,2}(?::\d{2}|\s*[ap]\.?m\b))/gi, '$1 - ').replace(/([^\s-])-[ \t]+(?=\S)/g, '$1 - ').replace(/(\s)-(?=[^\s-])/g, ' - ').replace(/[ \t]{2,}/g, ' ');
 function parseDoc(text, team, clientNames, today) {
@@ -80,12 +82,19 @@ function parseDoc(text, team, clientNames, today) {
   const rows = [], rmap = new Map(), clx = [...clientNames]; let date = today;
   text.split(/\r?\n/).forEach(ln => {
     ln = ln.replace(/^\s*[*•●◦-]\s+/, '').replace(/^\s*\d{1,3}\s*[.)]?\s*\t\s*/, '').replace(/^\s*\d{1,3}\s*[.)]\s+/, '').replace(/^\s*\d{1,3}\s{2,}(?=\S)/, '').trim(); ln = bpNorm(ln);
-    const iv = /interview/i.test(ln) || (/\b(phn|phone|phonecall|call)\b/i.test(ln) && (TR.test(ln) || /waiting|invite|round|duration/i.test(ln)));
+    const iv = IVR.test(ln) || (/\b(phn|phone|phonecall|call)\b/i.test(ln) && (TR.test(ln) || /waiting|invite|round|duration/i.test(ln)));
     const hd = /^([a-z]{3})[a-z]*\s+(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{4})?/i.exec(ln);
     if (hd && !iv && MO.includes(hd[1].toLowerCase())) { date = (hd[3] || today.slice(0, 4)) + '-' + pad(MO.indexOf(hd[1].toLowerCase()) + 1) + '-' + pad(+hd[2]); return }
     const m = new RegExp(sep).exec(ln); if (!iv || !m) return;
     const s0 = ln.slice(0, m.index), rest = ln.slice(m.index + m[0].length), par = [...s0.matchAll(/\(([^)]*)\)/g)].map(x => x[1].trim());
-    const c2 = rest.split(new RegExp(sep)).map(x => x.replace(/\(.*$/, '').replace(/\s+/g, ' ').trim()).find(x => x && !/interview/i.test(x) && !/^(?:phn|phone)?\s*(?:call|interview)s?$/i.test(x) && !/^phn\b/i.test(x) && !CT.test(x) && !TR.test(x) && !/^duration|round/i.test(x)) || '';
+    // client = first segment after the candidate that is not "Interview", a country, a time, a duration or a round
+    const isMeta = x => !x || IVR.test(x) || /^(?:phn|phone)?\s*(?:call|interview)s?$/i.test(x) || /^phn\b/i.test(x) || CT.test(x) || TR.test(x) || /^duration|round|^\d+\s*(?:mins?|hrs?)\b|elabor|eloborat|waiting|invit/i.test(x);
+    const segs = rest.split(new RegExp(sep)).map(x => x.replace(/\s+/g, ' ').trim()), ci = segs.findIndex(x => !isMeta(x.replace(/\(.*$/, '').trim()));
+    const raw = ci < 0 ? '' : segs[ci], dash = s => s.replace(/^[\s\-–—]+|[\s\-–—:,]+$/g, '').trim();
+    let c2 = dash(raw.replace(/\(.*$/, '')), role2 = '';
+    { const pr = [...raw.matchAll(/\(([^)]*)\)/g)].map(x => x[1].trim()).find(x => x && !isMeta(x) && x.split(' ').length >= 2); if (pr) role2 = pr }   // "Client-(Role)"
+    { const m = /^(.+?)-(?=[A-Z][a-z])(.+)$/.exec(c2); if (m && m[2].trim().split(/\s+/).length >= 2) { c2 = dash(m[1]); role2 = role2 || dash(m[2]) } }   // "client-Role Name"
+    if (!role2 && ci >= 0) { const nx = (segs[ci + 1] || '').replace(/\(.*$/, '').trim(); if (nx && !isMeta(nx) && !/\d{1,2}(?::\d{2})?\s*[ap]\.?m/i.test(nx)) role2 = dash(nx) }   // "Client - Role - time"
     const client = clientCanon(c2 == c2.toLowerCase() ? tcase(c2) : c2, clx);
     const tt = TR.exec(rest), hr = /(\d+(?:\.\d+)?)\s*(?:hrs?|hours?)\b/i.exec(rest), mn = /(\d+)\s*min/i.exec(rest), mins = (hr ? hr[1] * 60 : 0) + (mn ? +mn[1] : 0);
     const rd = /final/i.test(rest) ? 'Final' : /\bloop\b/i.test(rest) ? 'Loop' : (x => x ? 'Round ' + x[1] : '')(/(\d)\s*(?:st|nd|rd|th)?\s*round/i.exec(rest));
@@ -95,8 +104,8 @@ function parseDoc(text, team, clientNames, today) {
     const ex_ = [...rest.matchAll(/\(([^)]*)\)/g)].map(x => x[1].trim()).filter(x => x && !/round|^(?:loop|final)$|^\d+\s*mins?\b/i.test(x) && !/^el[ao]bor/i.test(x) && !CT.test(x));
     let time = ''; if (tt) { let h = +tt[1]; const p = tt[3].toLowerCase(); if (p == 'p' && h < 12) h += 12; if (p == 'a' && h == 12) h = 0; time = pad(h) + ':' + (tt[2] || '00') }
     const r = {
-      cand: tcase(s0.replace(/\(.*$/, '').replace(/[\s-]*(?:phn\s*|phone\s*)?interview\w*\s*$/i, '').replace(/[\s-]+$/, '')), role: par.find(x => !CT.test(x)) || '', loc: par.find(x => CT.test(x)) || '',
-      client, date, time, dur: mins || 60, round: rd, type, poc: tdm ? (pfind(tdm[1]) || { name: tcase(tdm[1]) }).name : '', prep: /\bel[ao]bor\w*/i.test(rest) ? 'Done' : 'Pending',
+      cand: tcase(s0.replace(/\(.*$/, '').replace(/[\s-]*(?:phn\s*|phone\s*)?i?nterv\w*\s*$/i, '').replace(/[\s\-–—]+$/, '')), role: par.find(x => !CT.test(x) && !IVR.test(x)) || role2 || '', loc: par.find(x => CT.test(x)) || '',
+      client, date, time, dur: mins || 60, round: rd, type, poc: tdm ? (pfind(tdm[1]) || { name: tcase(tdm[1]) }).name : '', prep: prepOf(rest),
       notes: [notes, isCall ? 'Phone call' : '', ...ex_].filter(Boolean).join(' · ')
     };
     const key = nm(r.cand) + '|' + nm(r.client) + '|' + date + '|' + time, o = rmap.get(key);
@@ -211,6 +220,22 @@ async function runSync(dry) {
   return { S, now, sample: dry ? rows.slice(0, 15) : undefined };
 }
 
+async function repairSync() {
+  const r = await fetch(`https://docs.google.com/document/d/${DOC_ID}/export?format=txt`, { redirect: 'follow' }), text = (await r.text()).replace(/^\uFEFF/, '');
+  if (!r.ok || /<html/i.test(text.slice(0, 1000))) throw new Error('Could not read the Google Doc');
+  const [team, cls, lines] = await Promise.all([all('team_members', 'id,name'), all('clients', 'id,name'), rest('doc_sync_lines?select=key,interview_id,action&interview_id=not.is.null&limit=100000')]);
+  const rows = parseDoc(text, team, cls.map(c => c.name), istDate(Date.now() - 6 * 3600e3)), byKey = new Map(rows.map(x => [[nk(x.cand), ckey(x.client), x.round, x.date, x.time].join('|'), x]));
+  const mine = lines.filter(l => ['added', 'rescheduled', 'updated', null].includes(l.action)), ids = mine.map(l => l.interview_id);
+  const ivs = []; for (let i = 0; i < ids.length; i += 200) ivs.push(...await rest(`interviews?select=id,role,prep_status&id=in.(${ids.slice(i, i + 200).join(',')})`));
+  const iv = new Map(ivs.map(x => [x.id, x])); let prep = 0, role = 0;
+  for (const l of mine) {
+    const row = byKey.get(l.key), x = iv.get(l.interview_id); if (!row || !x) continue;
+    const patch = {}; if (x.prep_status != row.prep && x.prep_status != 'In Progress') { patch.prep_status = row.prep; prep++ }
+    if (!x.role && row.role) { patch.role = clean(row.role); role++ }
+    if (Object.keys(patch).length) await rest(`interviews?id=eq.${x.id}`, { method: 'PATCH', body: patch });
+  }
+  return { prep, role };
+}
 const summary = (S, when) => [
   `Sheet updated at ${when}`,
   `New interviews: ${S.added}${S.rescheduled ? ` (${S.rescheduled} rescheduled)` : ''} · Times filled: ${S.updated} · Already in portal: ${S.already}`,
@@ -224,6 +249,7 @@ module.exports = async (req, res) => {
   const who = await allowed(req);
   if (!who) return res.status(401).json({ ok: false, error: 'Not allowed' });
   const started = new Date();
+  if (req.query && req.query.repair == '1') { try { const r = await repairSync(); await rest('activity_log', { method: 'POST', body: { actor_email: 'auto-sync', actor_name: 'Auto sync', action: `Repaired synced interviews: prep corrected on ${r.prep}, role filled on ${r.role}` }, prefer: 'return=minimal' }).catch(() => { }); return res.status(200).json({ ok: true, ...r }) } catch (e) { return res.status(500).json({ ok: false, error: e.message }) } }
   try {
     const { S, sample } = await runSync(dry), when = istStamp(started), msg = summary(S, when);
     if (!dry) {
