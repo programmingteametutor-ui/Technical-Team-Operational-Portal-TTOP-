@@ -266,3 +266,5 @@ module.exports = async (req, res) => {
   }
 };
 module.exports.parseDoc = parseDoc;
+// Allow up to 60 seconds (older Vercel projects stop functions after 10 seconds by default)
+module.exports.config = { maxDuration: 60 };
