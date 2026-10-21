@@ -130,6 +130,18 @@ async function allowed(req) {
   } catch (e) { return null }
 }
 
+/* A doc line with only a first name ("Sujith") matches a full-name candidate ("Sujith Koneru")
+   when exactly one such candidate already interviewed with the same client, or is the only one with that POC. */
+function oneWord(row, C, I, CL) {
+  const w = strip(row.cand).split(' '); if (w.length != 1 || w[0].length < 3) return undefined;
+  const pool = C.filter(x => { const t = strip(x.name).split(' '); return t.length > 1 && t.includes(w[0]) });
+  if (!pool.length) return undefined;
+  const cn = clientCanon(row.client, CL.map(x => x.name)), cl = CL.find(x => x.name == cn);
+  if (cl) { const h = pool.filter(x => I.some(i => i.candidate_id == x.id && i.client_id == cl.id)); if (h.length == 1) return h[0]; if (h.length > 1) return undefined }
+  if (row.poc) { const p = pool.filter(x => x.pocName == row.poc); if (p.length == 1) return p[0] }
+  return undefined;
+}
+
 /* ---------- The sync ---------- */
 async function runSync(dry) {
   const now = new Date(), today = istDate(Date.now() - 6 * 3600e3), sheetDate = istDate(Date.now());
@@ -146,9 +158,9 @@ async function runSync(dry) {
   const C = cands.map(c => ({ ...c, pocName: tName(c.technical_poc_id) })), CL = cls.slice(), I = ivs.map(x => ({ ...x, interview_time: (x.interview_time || '').slice(0, 5) }));
   const seen = new Set(seenRows.map(x => x.key)), rows = parseDoc(text, team, CL.map(c => c.name), today);
   const pfind = n => n && team.find(t => nm(t.name) == nm(n) || nm(t.name.split(' ')[0]) == nm(n));
-  let fake = -1; const S = { lines: rows.length, added: 0, updated: 0, rescheduled: 0, already: 0, newCands: 0, newClients: 0, pending: 0, review: 0, failed: 0, errors: [] };
+  let fake = -1; const S = { lines: rows.length, added: 0, updated: 0, rescheduled: 0, already: 0, newCands: 0, newClients: 0, pending: 0, review: 0, held: 0, failed: 0, errors: [] };
   const review = [], seenAdd = [], plans = [];
-  const rv = (row, kind, extra) => review.push({ reason: { dupe: 'dupe', newc: 'cand' }[kind] || 'fix', created_by: 'Auto sync', payload: { cand: row.cand, role: row.role, client: row.client, date: row.date, time: row.time, dur: row.dur + ' Minutes', round: row.round, type: row.type, td: '', poc: row.poc, prep: row.prep, notes: row.notes, loc: row.loc, rsId: '', kind, iid: '', xid: '', msg: '', ...extra } });
+  const rv = (row, kind, extra) => review.push({ reason: { dupe: 'dupe', newc: 'cand' }[kind] || 'fix', created_by: 'Auto sync', payload: { cand: row.cand, role: row.role, client: row.client, date: row.date, time: row.time, dur: row.dur + ' Minutes', round: row.round, type: row.type, td: '', poc: row.poc, prep: row.prep, notes: row.notes, loc: row.loc, rsId: '', kind, iid: '', xid: '', msg: '', hold: '', ...extra } });
 
   for (const row of rows) {
     const key = [nk(row.cand), ckey(row.client), row.round, row.date, row.time].join('|');
@@ -156,13 +168,10 @@ async function runSync(dry) {
     if (!row.cand || !row.client || !row.date) { rv(row, 'skip', { msg: 'Not imported: ' + (!row.client ? 'client' : !row.cand ? 'candidate' : 'date') + ' is missing in the doc line' }); seen.add(key); seenAdd.push({ key, action: 'skipped' }); continue }
 
     // candidate (never duplicated: same matching as the portal)
-    let c = candFind(row.cand, C, row.poc).c, newc = false;
-    if (!c) {
-      const poc = pfind(row.poc), o = { name: clean(row.cand), location: clean(row.loc) || null, technical_poc_id: poc ? poc.id : null, active: true };
-      if (dry) c = { id: fake--, ...o };
-      else { try { c = (await rest('candidates', { method: 'POST', body: o, prefer: 'return=representation' }))[0] } catch (e) { const f = (await all('candidates', 'id,name,technical_poc_id')).find(x => nk(x.name) == nk(row.cand)); if (!f) { S.failed++; S.errors.push(row.cand + ': ' + e.message); continue } c = f } }
-      c.pocName = poc ? poc.name : ''; C.push(c); S.newCands++; newc = true;
-    }
+    const c = candFind(row.cand, C, row.poc).c || oneWord(row, C, I, CL);
+    // VERIFY FIRST: a candidate who is not in the portal is NOT created automatically.
+    // The line waits on Import Review ("Waiting for approval") until someone checks the name and adds it.
+    if (!c) { rv(row, 'newc', { hold: '1', client: clientCanon(row.client, CL.map(x => x.name)) }); S.held++; seen.add(key); seenAdd.push({ key, action: 'held' }); continue }
     // client
     const cn = clientCanon(row.client, CL.map(x => x.name)); let cl = CL.find(x => x.name == cn);
     if (!cl) {
@@ -183,6 +192,9 @@ async function runSync(dry) {
       S.updated++; seen.add(key); seenAdd.push({ key, action: 'updated', interview_id: x.id > 0 ? x.id : null }); continue;
     }
     const rs = x && /resched/i.test(row.notes || '') && ['Scheduled', 'Date Pending', 'Completed'].includes(x.interview_status) ? x : null;
+    // VERIFY FIRST: same candidate + client + round already exists and the doc does not say "reschedule":
+    // not added; waits on Import Review so someone can add it as new, mark it a reschedule, or delete it.
+    if (x && !rs) { rv(row, 'dupe', { hold: '1', client: cl.name, xid: x.id > 0 ? x.id : '' }); S.held++; seen.add(key); seenAdd.push({ key, action: 'held' }); continue }
     const body = {
       candidate_id: c.id, role: clean(row.role) || null, client_id: cl.id, interview_date: noT ? null : row.date, interview_time: noT ? null : row.time,
       duration_minutes: row.dur, round: row.round, interview_type: row.type, source: 'Direct', prep_status: row.prep, interview_status: status,
@@ -190,16 +202,14 @@ async function runSync(dry) {
     };
     const ph = { id: 0, candidate_id: c.id, client_id: cl.id, role: row.role, round: row.round, interview_date: body.interview_date, interview_time: body.interview_time || '', interview_status: status };
     I.push(ph); seen.add(key);
-    plans.push({ row, key, body, ph, rs, dupeOf: !rs && x ? x : null, newc });
+    plans.push({ row, key, body, ph, rs });
   }
 
   // insert new interviews in batches (falls back to one at a time if a batch is refused)
   const done = (p, id) => {
     p.ph.id = id; S.added++; if (p.rs) { S.rescheduled++ } if (!p.body.interview_date) S.pending++;
     seenAdd.push({ key: p.key, action: p.rs ? 'rescheduled' : 'added', interview_id: id > 0 ? id : null });
-    if (p.dupeOf) rv(p.row, 'dupe', { iid: id, xid: p.dupeOf.id });
     if (!p.body.interview_date) rv(p.row, 'time', { iid: id });
-    if (p.newc) rv(p.row, 'newc', {});
   };
   for (let i = 0; i < plans.length; i += 200) {
     const ch = plans.slice(i, i + 200);
@@ -239,7 +249,7 @@ async function repairSync() {
 const summary = (S, when) => [
   `Sheet updated at ${when}`,
   `New interviews: ${S.added}${S.rescheduled ? ` (${S.rescheduled} rescheduled)` : ''} · Times filled: ${S.updated} · Already in portal: ${S.already}`,
-  `New candidates: ${S.newCands} · Date pending: ${S.pending} · Import Review: ${S.review}${S.failed ? ` · Failed: ${S.failed}` : ''}`
+  `Waiting for approval: ${S.held} · Date pending: ${S.pending} · Import Review: ${S.review}${S.failed ? ` · Failed: ${S.failed}` : ''}`
 ].join('\n');
 
 module.exports = async (req, res) => {
@@ -254,7 +264,7 @@ module.exports = async (req, res) => {
     const { S, sample } = await runSync(dry), when = istStamp(started), msg = summary(S, when);
     if (!dry) {
       await rest('sync_runs', { method: 'POST', body: { ok: true, added: S.added, updated: S.updated, skipped: S.already, new_candidates: S.newCands, review: S.review, failed: S.failed, triggered_by: who, message: msg, error: S.errors.slice(0, 20).join('\n') || null }, prefer: 'return=minimal' });
-      await rest('activity_log', { method: 'POST', body: { actor_email: 'auto-sync', actor_name: 'Auto sync', action: `Doc sync (${when}): ${S.added} added, ${S.updated} times filled, ${S.newCands} new candidates, ${S.review} to review` }, prefer: 'return=minimal' }).catch(() => { });
+      await rest('activity_log', { method: 'POST', body: { actor_email: 'auto-sync', actor_name: 'Auto sync', action: `Doc sync (${when}): ${S.added} added, ${S.updated} times filled, ${S.held} waiting for approval, ${S.review} to review` }, prefer: 'return=minimal' }).catch(() => { });
     }
     return res.status(200).json({ ok: true, dry, when, ...S, message: msg, sample });
   } catch (e) {
