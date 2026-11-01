@@ -54,7 +54,7 @@ const bad = m => { throw new HttpError(400, m) };
 const EMAIL_RE = /^[^\s@<>"']{1,64}@[^\s@<>"']{1,190}$/;
 const THREAD_RE = /^(\d{1,15})\.([A-Za-z0-9_-]{1,64})$/;
 function parseList(q) {
-  const allowed = ['page', 'pageSize', 'q', 'student', 'client', 'stage', 'hasDate', 'showPast', 'view', 'diag'];
+  const allowed = ['page', 'pageSize', 'q', 'student', 'client', 'stage', 'date', 'hasDate', 'showPast', 'view', 'diag'];
   for (const k of Object.keys(q || {})) if (!allowed.includes(k)) bad('Unknown parameter: ' + k);
   const one = k => { const v = q[k]; if (Array.isArray(v)) bad('Parameter given twice: ' + k); return v == null ? '' : String(v) };
   const int = (k, d, lo, hi) => { const v = one(k); if (v === '') return d; if (!/^\d{1,6}$/.test(v) || +v < lo || +v > hi) bad(`${k} must be a whole number from ${lo} to ${hi}`); return +v };
@@ -64,8 +64,9 @@ function parseList(q) {
   const student = one('student').trim().toLowerCase(); if (student && (student.length > 254 || !EMAIL_RE.test(student))) bad('student must be an email address');
   const client = one('client').trim(); if (client.length > 200) bad('client is too long (max 200)');
   const stage = one('stage').toUpperCase(); if (stage && !LABELS.includes(stage)) bad('stage must be INTERVIEW or SCHEDULING');
+  const date = one('date'); if (date && !(/^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(date + 'T00:00:00Z')))) bad('date must be YYYY-MM-DD');
   const view = one('view').toLowerCase() || 'todo'; if (!['todo', 'added', 'dismissed', 'all'].includes(view)) bad('view must be todo, added, dismissed or all');
-  return { page: int('page', 1, 1, 100000), pageSize, q: text, student, client, stage, hasDate: bool('hasDate'), showPast: bool('showPast'), view, diag: bool('diag') };
+  return { page: int('page', 1, 1, 100000), pageSize, q: text, student, client, stage, date, hasDate: bool('hasDate'), showPast: bool('showPast'), view, diag: bool('diag') };
 }
 const parseMsgId = v => { if (!/^\d{1,15}$/.test(String(v || ''))) bad('Invalid message id'); return +v };
 const parseThreadKey = v => { const m = THREAD_RE.exec(String(v || '')); if (!m) bad('Invalid thread key'); return { key: m[0], account: +m[1], thread: m[2] } };
@@ -335,8 +336,9 @@ async function list(req, D = realDeps()) {
     (!P.student || r.student_email == P.student) &&
     (!P.client || (r.client_match || '').toLowerCase() == P.client.toLowerCase()) &&
     (!P.stage || r.stage == P.stage) &&
+    (!P.date || r.date == P.date) &&
     (!P.hasDate || !!r.date) &&
-    (P.showPast || !r.past));
+    (P.showPast || !!P.date || !r.past));
   L.sort((a, b) => String(b.received_at).localeCompare(String(a.received_at)) || a.thread_key.localeCompare(b.thread_key));
   const total = L.length, pages = Math.max(1, Math.ceil(total / P.pageSize)), page = Math.min(P.page, pages);
   return { ok: true, start_date: C.start, today: ctx.today, last_fetch: run, page, pageSize: P.pageSize, total, pages, counts, facets, catching_up: pending,
