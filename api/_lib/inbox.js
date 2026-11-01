@@ -82,13 +82,13 @@ function mysqlPool() {
     dateStrings: true, multipleStatements: false, supportBigNumbers: true, bigNumberStrings: false, charset: 'utf8mb4' });
   // every connection: read only + UTC session (so TIMESTAMP columns come back in UTC)
   const warn = w => e => { if (e) console.error('interview-inbox: ' + w + ' failed: ' + (e.code || e.message)) };
-  POOL.pool.on('connection', c => { c.query('SET SESSION TRANSACTION READ ONLY', warn('read-only session')); c.query("SET SESSION time_zone = '+00:00'", warn('UTC session')); c.query('SET SESSION MAX_EXECUTION_TIME = 10000', () => {}) });
+  POOL.pool.on('connection', c => { c.query('SET SESSION TRANSACTION READ ONLY', warn('read-only session')); c.query("SET SESSION time_zone = '+00:00'", warn('UTC session')); c.query('SET SESSION MAX_EXECUTION_TIME = 25000', () => {}) });
   return POOL;
 }
 const READ_ONLY_SQL = /^\s*SELECT\b/i;
 async function mysqlQuery(sql, params) {
   if (!READ_ONLY_SQL.test(sql) || /;\s*\S/.test(sql)) throw new Error('Refused: the recruiter database is read only');
-  try { const [rows] = await mysqlPool().query({ sql, timeout: 10000 }, params || []); return rows }
+  try { const [rows] = await mysqlPool().query({ sql, timeout: 25000 }, params || []); return rows }
   catch (e) { if (e instanceof HttpError) throw e; const x = new HttpError(502, 'Could not read the recruiter email database (' + (e.code || 'error') + ')'); x.cause = e; throw x }
 }
 
@@ -155,11 +155,25 @@ async function startId(D, startDb) {
   const k = 'start_id:' + startDb;
   const s = ((await D.sb(`interview_inbox_state?key=eq.${encodeURIComponent(k)}&select=value`)) || [])[0];
   if (s && /^\d+$/.test(s.value)) return +s.value;
-  const r = (await D.mysql('SELECT MIN(id) AS id FROM recruiter_messages WHERE internal_date >= ?', [startDb]))[0];
-  if (!r || r.id == null) return null;                                   // nothing yet: don't cache
-  await D.sb('interview_inbox_state?on_conflict=key', { method: 'POST', body: { key: k, value: String(r.id) }, prefer: 'resolution=merge-duplicates,return=minimal' });
-  return +r.id;
+  // Find the first email on/after (start date - 7 days) by binary search on the primary key: each step is one
+  // indexed lookup, so this stays fast on a very large table (no scan of internal_date).
+  // The 7-day margin covers emails stored slightly out of order; every query still filters internal_date >= start.
+  const mm = (await D.mysql('SELECT MIN(id) AS lo, MAX(id) AS hi FROM recruiter_messages'))[0];
+  if (!mm || mm.hi == null) return null;
+  const at = async id => (await D.mysql('SELECT id, internal_date FROM recruiter_messages WHERE id >= ? ORDER BY id LIMIT 1', [id]))[0];
+  const newest = await at(+mm.hi);
+  if (!newest || String(newest.internal_date) < startDb) return null;     // no email since the start date yet: don't cache
+  const target = startDbMinus(startDb, 7);
+  let lo = +mm.lo, hi = +mm.hi;
+  for (let n = 0; lo < hi && n < 64; n++) {
+    const mid = Math.floor((lo + hi) / 2), r = await at(mid);
+    if (!r) { hi = mid; continue }
+    if (String(r.internal_date) < target) lo = +r.id + 1; else hi = mid;
+  }
+  await D.sb('interview_inbox_state?on_conflict=key', { method: 'POST', body: { key: k, value: String(lo) }, prefer: 'resolution=merge-duplicates,return=minimal' });
+  return lo;
 }
+const startDbMinus = (dbStr, days) => fmt(new Date(Date.parse(String(dbStr).replace(' ', 'T') + 'Z') - days * 864e5));
 const LBL_SQL = `classifier_label IN ('INTERVIEW','SCHEDULING')`;
 
 async function threadSummaries(D, sid, startDb) {
@@ -378,7 +392,7 @@ async function dismiss(req, D = realDeps()) {
 // Admin check: which timezone is internal_date stored in? Compares the newest email with the database clock.
 async function diag(who, D, C) {
   if (!who.admin) throw new HttpError(403, 'Admins only');
-  const [x] = await D.mysql(`SELECT MAX(internal_date) AS max_internal_date, NOW() AS db_now, UTC_TIMESTAMP() AS db_utc_now, @@session.time_zone AS session_tz, @@global.time_zone AS global_tz FROM recruiter_messages`);
+  const [x] = await D.mysql(`SELECT (SELECT internal_date FROM recruiter_messages ORDER BY id DESC LIMIT 1) AS max_internal_date, NOW() AS db_now, UTC_TIMESTAMP() AS db_utc_now, @@session.time_zone AS session_tz, @@global.time_zone AS global_tz`);
   const [col] = await D.mysql(`SELECT DATA_TYPE AS data_type FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'recruiter_messages' AND COLUMN_NAME = 'internal_date'`);
   const maxAsUtc = Date.parse(String(x.max_internal_date).replace(' ', 'T') + 'Z'), now = D.now(), mins = Math.round((maxAsUtc - now) / 60000);
   const guess = col && /timestamp/i.test(col.data_type) ? 'UTC (TIMESTAMP column, read in a UTC session)'
