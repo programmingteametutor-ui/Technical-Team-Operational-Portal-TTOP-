@@ -101,10 +101,12 @@ async function sbRest(path, { method = 'GET', body, prefer, token } = {}) {
   if (!r.ok) { const e = new HttpError(502, 'Database error: ' + ((d && d.message) || t || r.status)); e.code = d && d.code; throw e }
   return d;
 }
+// tables without an id column are paged by their primary key
+const SORT_KEY = { interview_inbox_threads: 'thread_key', interview_inbox_dismissed: 'thread_key', interview_inbox_state: 'key' };
 async function sbAll(table, select, filter = '') {
   let out = [];
   for (let from = 0; ; from += 1000) {
-    const d = await sbRest(`${table}?select=${select}${filter ? '&' + filter : ''}&order=${table == 'interview_inbox_threads' ? 'thread_key' : 'id'}&offset=${from}&limit=1000`);
+    const d = await sbRest(`${table}?select=${select}${filter ? '&' + filter : ''}&order=${SORT_KEY[table] || 'id'}&offset=${from}&limit=1000`);
     out = out.concat(d || []); if (!d || d.length < 1000) return out;
   }
 }
@@ -398,4 +400,4 @@ const handler = fn => async (req, res) => {
   }
 };
 
-module.exports = { list, detail, dismiss, refresh, fetchNow, handler, HttpError, parseList, parseThreadKey, clientMatch, ckey, ftQuery, dbToMs, msToDb, istMidnightMs, stripQuoted, mysqlQuery, LABELS };
+module.exports = { sbAll, list, detail, dismiss, refresh, fetchNow, handler, HttpError, parseList, parseThreadKey, clientMatch, ckey, ftQuery, dbToMs, msToDb, istMidnightMs, stripQuoted, mysqlQuery, LABELS };
