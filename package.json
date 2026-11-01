@@ -1,0 +1,14 @@
+{
+  "name": "ttop-portal",
+  "private": true,
+  "description": "TTOP Portal: static index.html + Vercel functions in /api",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "mysql2": "3.11.3"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  }
+}
