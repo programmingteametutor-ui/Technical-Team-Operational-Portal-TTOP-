@@ -135,9 +135,11 @@ function createSpreadsheetApp(env) {
     const row = ensureRow(sd, r - 1);
     const fmt = row.f ? row.f[c - 1] || null : null;
     const st = toStored(input, fmt, env);
+    // Same value over a plain cell (no formula): Google shows it unchanged, so keep its imported display text
+    const same = !(row.x && row.x[c - 1]) && sameCell(row.v[c - 1], st.value);
     while (row.v.length < c - 1) row.v.push("");
     row.v[c - 1] = st.value;
-    if (row.d) row.d[c - 1] = undefined;
+    if (row.d && !same) row.d[c - 1] = undefined;
     if (row.x) row.x[c - 1] = undefined;
     if (st.format !== undefined && !(opts && opts.noFormat)) {
       if (!fmt || !st.keepIfSet || (st.value instanceof Date && !F.isDateFormat(fmt))) {
@@ -145,6 +147,12 @@ function createSpreadsheetApp(env) {
         row.f[c - 1] = st.format;
       }
     }
+  }
+  function sameCell(a, b) {
+    const empty = (v) => v === "" || v === null || v === undefined;
+    if (empty(a) || empty(b)) return empty(a) && empty(b);
+    if (a instanceof Date || b instanceof Date) return a instanceof Date && b instanceof Date && a.getTime() === b.getTime();
+    return a === b;
   }
   function readValue(sd, r, c) {
     const row = sd.rows[r - 1];
@@ -273,7 +281,9 @@ function createSpreadsheetApp(env) {
       if (!rr.f) rr.f = [];
       for (let c = 0; c < numCols; c++) {
         const f = fn(r, c);
-        rr.f[col - 1 + c] = !f || /^general$/i.test(f) ? null : String(f);
+        const nf = !f || /^general$/i.test(f) ? null : String(f);
+        if ((rr.f[col - 1 + c] || null) === nf) continue;   // format unchanged: display unchanged
+        rr.f[col - 1 + c] = nf;
         if (rr.d) rr.d[col - 1 + c] = undefined;
       }
     }

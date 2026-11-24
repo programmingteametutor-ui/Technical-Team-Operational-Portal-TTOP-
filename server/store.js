@@ -184,7 +184,11 @@ class Journal {
   changeSet() {
     const sheets = new Map(); // SheetData -> {full, rows:Set}
     const add = (s) => { let e = sheets.get(s); if (!e) { e = { full: false, rows: new Set(), meta: false }; sheets.set(s, e); } return e; };
-    for (const [s, m] of this.rowChanges) { const e = add(s); for (const i of m.keys()) e.rows.add(i); }
+    // Rows written back unchanged (scripts often rewrite whole ranges) are not saved
+    for (const [s, m] of this.rowChanges) {
+      const changed = [...m].filter(([i, orig]) => !sameRow(orig, s.rows[i])).map(([i]) => i);
+      if (changed.length) { const e = add(s); for (const i of changed) e.rows.add(i); }
+    }
     for (const s of this.fullSheets.keys()) add(s).full = true;
     for (const s of this.createdSheets) add(s).full = true;
     for (const s of this.metaSheets) add(s).meta = true;
@@ -206,6 +210,24 @@ class Journal {
     }
     return { sheets, deleted, props, cache };
   }
+}
+
+/** Same stored content (values, formats, captured display, formulas)? Empty cells compare equal. */
+function sameRow(a, b) {
+  const ea = !a || a.isEmpty(), eb = !b || b.isEmpty();
+  if (ea || eb) return ea && eb && sameList(a && a.d, b && b.d);
+  return sameList(a.v, b.v) && sameList(a.f, b.f) && sameList(a.d, b.d) && sameList(a.x, b.x);
+}
+function sameList(a, b) {
+  const n = Math.max(a ? a.length : 0, b ? b.length : 0);
+  for (let i = 0; i < n; i++) {
+    const x = a ? a[i] : undefined, y = b ? b[i] : undefined;
+    const ex = x === "" || x === null || x === undefined, ey = y === "" || y === null || y === undefined;
+    if (ex || ey) { if (ex && ey) continue; return false; }
+    if (x instanceof Date || y instanceof Date) { if (!(x instanceof Date && y instanceof Date && x.getTime() === y.getTime())) return false; continue; }
+    if (x !== y) return false;
+  }
+  return true;
 }
 
 class Store {
