@@ -162,38 +162,56 @@ class SupabaseAdapter {
       wb.sheets.push(sd);
       list.push(sd);
     }
-    // rows: several tabs in parallel, each paged by row number
+    // rows: every tab is cut into slices of 1,000 row numbers (Supabase returns at most
+    // 1,000 rows per request) and all slices are fetched in parallel, so a large tab no
+    // longer needs one request after another. A tab's first slice also reports its last
+    // row number, which decides how many more slices it has.
     let n = 0;
-    const loadSheet = async (sd) => {
-      for (let after = 0; ;) {
-        const page = await this.req("GET", "gs_rows?select=row_num,v,f,d,x,seq&sheet_pk=eq." + sd.pk + "&row_num=gt." + after + "&order=row_num&limit=1000");
-        for (const r of page) { sd.rows[r.row_num - 1] = decodeRow(r); sd.seqs.set(r.row_num - 1, Number(r.seq)); }
-        n += page.length;
-        if (page.length < 1000) return;
-        after = page[page.length - 1].row_num;
-      }
+    const SLICE = 1000;
+    const COLS = "select=row_num,v,f,d,x,seq";
+    const take = (sd, page) => {
+      for (const r of page) { sd.rows[r.row_num - 1] = decodeRow(r); sd.seqs.set(r.row_num - 1, Number(r.seq)); }
+      n += page.length;
     };
-    const queue = list.slice();
-    await Promise.all(Array.from({ length: Number(process.env.SUPABASE_LOAD_PARALLEL || 8) }, async () => { while (queue.length) await loadSheet(queue.shift()); }));
-    const props = await this.selectAll("gs_script_properties", "select=project,key,value,seq");
+    const tasks = [];   // functions returning a promise
+    const slice = (sd, from) => () => this.req("GET", "gs_rows?" + COLS + "&sheet_pk=eq." + sd.pk + "&row_num=gt." + from + "&row_num=lte." + (from + SLICE) + "&order=row_num")
+      .then(page => take(sd, page));
+    const first = (sd) => () => Promise.all([
+      this.req("GET", "gs_rows?" + COLS + "&sheet_pk=eq." + sd.pk + "&row_num=lte." + SLICE + "&order=row_num"),
+      this.req("GET", "gs_rows?select=row_num&sheet_pk=eq." + sd.pk + "&order=row_num.desc&limit=1")
+    ]).then(([page, last]) => {
+      take(sd, page);
+      const lastRow = last.length ? last[0].row_num : 0;
+      for (let from = SLICE; from < lastRow; from += SLICE) tasks.push(slice(sd, from));
+    });
+    // biggest tabs first, so their extra slices are queued early
+    for (const sd of list.slice().sort((a, b) => b.maxRows - a.maxRows)) tasks.push(first(sd));
+    // settings, cache, triggers and export log load alongside the rows
+    const side = Promise.all([
+      this.selectAll("gs_script_properties", "select=project,key,value,seq"),
+      this.selectAll("gs_cache", "select=project,key,value,expires_at&expires_at=gt." + encodeURIComponent(new Date().toISOString())),
+      this.selectAll("gs_triggers", "select=*"),
+      this.selectAll("gs_export_log", "select=project,web_app_url,script_id,spreadsheet_id").catch(() => [])   // optional table
+    ]);
+    side.catch(() => {});   // awaited below; avoid an unhandled rejection while rows load
+    await runPool(tasks, Number(process.env.SUPABASE_LOAD_PARALLEL || 16));
+    const [props, cacheRows, triggerRows, exportLog] = await side;
     for (const p of props) {
       if (p.value !== null) store.properties(p.project).set(p.key, p.value);
       seqMap(store, p.project).set(p.key, Number(p.seq));
     }
     const { CACHES } = require("./gas/services");
-    for (const c of await this.selectAll("gs_cache", "select=project,key,value,expires_at&expires_at=gt." + encodeURIComponent(new Date().toISOString()))) {
+    for (const c of cacheRows) {
       let m = CACHES.get(c.project); if (!m) { m = new Map(); CACHES.set(c.project, m); }
       m.set(c.key, { v: c.value, exp: new Date(c.expires_at).getTime() });
     }
-    await this.loadTriggers(store);
-    let exportLog = [];
-    try { exportLog = await this.selectAll("gs_export_log", "select=project,web_app_url,script_id,spreadsheet_id"); } catch (e) { /* optional */ }
+    store.triggers = triggerRows.map(triggerFromRow);
     store.lastSeq = startSeq;
     this.store = store;
     return { rows: n, sheets: sheets.length, workbooks: wbs.length, exportLog };
   }
   async loadTriggers(store) {
-    store.triggers = (await this.selectAll("gs_triggers", "select=*")).map(t => ({ id: t.id, project: t.project, handler: t.handler, type: t.event_type, source_id: t.source_id, meta: t.meta || {} }));
+    store.triggers = (await this.selectAll("gs_triggers", "select=*")).map(triggerFromRow);
   }
 
   /** Bring this copy up to date with everything other copies saved (one call). */
@@ -300,6 +318,23 @@ class SupabaseAdapter {
   }
 }
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+/** Run queued tasks with at most `max` at once; tasks may queue more tasks while running. */
+function runPool(tasks, max) {
+  return new Promise((resolve, reject) => {
+    let active = 0, failed = false;
+    const pump = () => {
+      if (failed) return;
+      if (!tasks.length && !active) return resolve();
+      while (active < max && tasks.length) {
+        const t = tasks.shift();
+        active++;
+        t().then(() => { active--; pump(); }, (e) => { failed = true; reject(e); });
+      }
+    };
+    pump();
+  });
+}
+const triggerFromRow =(t) => ({ id: t.id, project: t.project, handler: t.handler, type: t.event_type, source_id: t.source_id, meta: t.meta || {} });
 /** Keep the last entry per key (one save may touch the same cache key twice). */
 function lastPerKey(list, keyFn) {
   const m = new Map();
