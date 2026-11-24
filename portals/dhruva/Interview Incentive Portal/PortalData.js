@@ -236,11 +236,12 @@ function getPortalDashboardData(
             "function"
         )
           ? (
-              PCO_loadAggregateCallDashboardFacts_("")
+              // only dateKey / handlers are used here: skip text parsing
+              PCO_loadAggregateCallDashboardFacts_("", { skipParse:true })
                 .facts || []
             )
           : (
-              PCO_loadCallDashboardFacts_("")
+              PCO_loadCallDashboardFacts_("", { skipParse:true })
                 .facts || []
             );
 

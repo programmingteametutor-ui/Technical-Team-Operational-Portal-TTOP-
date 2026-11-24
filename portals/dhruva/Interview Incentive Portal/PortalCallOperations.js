@@ -2154,7 +2154,12 @@ function PCO_getTransferHandlers_(currentHandler){
   });
 }
 
-function PCO_loadCallDashboardFacts_(requestedMonth){
+// options.skipParse: callers that only need dateKey / handlers / status (month lists,
+// "latest date with my calls") skip the candidate/client/time text parsing, which is
+// most of the cost when every call ever recorded is loaded. Those facts then have
+// empty candidate, client, duration and time, and nightCall false.
+function PCO_loadCallDashboardFacts_(requestedMonth, options){
+  const skipParse = !!(options && options.skipParse);
   const sheet = PC_scheduleSheet_();
   const lastRow = sheet.getLastRow();
   if(lastRow < 1){ return { facts:[], latestDateKey:"" }; }
@@ -2189,7 +2194,7 @@ function PCO_loadCallDashboardFacts_(requestedMonth){
     const hash = PC_hash_(normalized);
     duplicateCounts[hash] = (duplicateCounts[hash] || 0) + 1;
     const callId = "CALL-" + currentDateKey + "-" + hash.substring(0,12) + "-" + duplicateCounts[hash];
-    const parsed = PC_parseInterviewText_(extracted);
+    const parsed = skipParse ? { candidate:"", client:"", duration:"", time:"" } : PC_parseInterviewText_(extracted);
     const statusEntry = statusMap.byId[callId] || statusMap.byFallback[currentDateKey + "|" + normalized] || null;
     const transfer = approvedTransfers[callId] || null;
     let finalStatus = statusEntry ? PC_normalizeStatus_(statusEntry.status) : "";
@@ -2204,7 +2209,7 @@ function PCO_loadCallDashboardFacts_(requestedMonth){
     const initialHandler = transfer && transfer.initialHandler ? transfer.initialHandler : finalHandler;
     facts.push({
       callId:callId, dateKey:currentDateKey, dateLabel:currentDateLabel, candidate:parsed.candidate, client:parsed.client,
-      duration:parsed.duration || "", time:parsed.time, nightCall:PC_isNightTime_(parsed.time), initialHandler:initialHandler,
+      duration:parsed.duration || "", time:parsed.time, nightCall:skipParse ? false : PC_isNightTime_(parsed.time), initialHandler:initialHandler,
       finalHandler:finalHandler, sheetHandler:sheetHandler, status:finalStatus,
       support: PC_handlerKey_(sheetHandler) === "support" || PC_handlerKey_(finalHandler) === "support"
     });
@@ -2212,13 +2217,13 @@ function PCO_loadCallDashboardFacts_(requestedMonth){
   return { facts:facts, latestDateKey:latestDateKey };
 }
 
-function PCO_loadAggregateCallDashboardFacts_(requestedMonth){
+function PCO_loadAggregateCallDashboardFacts_(requestedMonth, options){
   const combined = [];
   let latestDateKey = "";
   ["PRADEEP","HYD","DEV"].forEach(function(teamCode){
     const runtime = typeof PTR_runtimeForCode_ === "function" ? PTR_runtimeForCode_(teamCode) : null;
     if(!runtime || runtime.connected !== true || !runtime.callTrackerId){ return; }
-    const loaded = PTR_withExecutionTeamCode_(teamCode, function(){ return PCO_loadCallDashboardFacts_(requestedMonth); });
+    const loaded = PTR_withExecutionTeamCode_(teamCode, function(){ return PCO_loadCallDashboardFacts_(requestedMonth, options); });
     if(!loaded){ return; }
     if(loaded.latestDateKey && (!latestDateKey || loaded.latestDateKey > latestDateKey)){ latestDateKey = loaded.latestDateKey; }
     (loaded.facts || []).forEach(function(item){

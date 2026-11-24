@@ -108,7 +108,11 @@ function toBuffer(v, charset) {
   return Buffer.from(String(v), charset === "US_ASCII" ? "ascii" : "utf8");
 }
 function createUtilities(env) {
-  const signed = (buf) => env.realm.Array.from(buf, b => (b > 127 ? b - 256 : b));
+  const signed = (buf) => {
+    const out = new env.realm.Array(buf.length);
+    for (let i = 0; i < buf.length; i++) out[i] = buf[i] > 127 ? buf[i] - 256 : buf[i];
+    return out;
+  };
   const U = {
     formatDate: (date, tz, fmt) => F.formatJavaDate(date, tz, fmt),
     formatString: (tpl, ...args) => {

@@ -533,8 +533,9 @@ function PC_latestAssignedDateKeyForHandler_(handler){
       "function"
     ){
 
+      // only dateKey / handlers are used here: skip text parsing
       const loaded =
-        PCO_loadCallDashboardFacts_("");
+        PCO_loadCallDashboardFacts_("", { skipParse:true });
 
       const dates = {};
 

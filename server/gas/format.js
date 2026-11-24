@@ -22,17 +22,30 @@ const pad = (n, w) => String(Math.abs(n)).padStart(w, "0");
 /* ------------------------------------------------------------------ */
 
 const dtfCache = new Map();
+// A zone's UTC offset only changes at DST transitions, which fall on 15-minute
+// boundaries; so the (slow) Intl lookup is done once per zone per 15 minutes.
+const offsetCache = new Map();
+const BUCKET_MS = 15 * 60000;
 function partsInZone(date, tz) {
-  date = new Date(date.getTime());
-  const fixed = parseFixedOffset(tz);
-  if (fixed !== null) {
-    const d = new Date(date.getTime() + fixed * 60000);
-    return {
-      y: d.getUTCFullYear(), M: d.getUTCMonth() + 1, d: d.getUTCDate(),
-      H: d.getUTCHours(), m: d.getUTCMinutes(), s: d.getUTCSeconds(),
-      S: d.getUTCMilliseconds(), dow: d.getUTCDay(), offset: fixed
-    };
+  const t = date.getTime();
+  let offset = parseFixedOffset(tz);
+  if (offset === null) {
+    const k = (tz || "") + "|" + Math.floor(t / BUCKET_MS);
+    offset = offsetCache.get(k);
+    if (offset === undefined) {
+      offset = partsViaIntl(new Date(Math.floor(t / BUCKET_MS) * BUCKET_MS), tz).offset;
+      if (offsetCache.size > 20000) offsetCache.clear();
+      offsetCache.set(k, offset);
+    }
   }
+  const d = new Date(t + offset * 60000);
+  return {
+    y: d.getUTCFullYear(), M: d.getUTCMonth() + 1, d: d.getUTCDate(),
+    H: d.getUTCHours(), m: d.getUTCMinutes(), s: d.getUTCSeconds(),
+    S: d.getUTCMilliseconds(), dow: d.getUTCDay(), offset
+  };
+}
+function partsViaIntl(date, tz) {
   let zone = tz || "Asia/Kolkata";
   let f = dtfCache.get(zone);
   if (!f) {
