@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Interview Operations Portal</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icons/icon-192.png">
+<style>
+  :root { --bg:#f6f7fb; --card:#fff; --line:#e3e6ee; --text:#18213a; --muted:#66708a; --brand:#1d4ed8; --brand2:#0b2b73; --ok:#15803d; --warn:#b45309; --bad:#b91c1c; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif; background:var(--bg); color:var(--text); }
+  header { display:flex; align-items:center; gap:12px; padding:14px 24px; background:var(--brand2); color:#fff; }
+  header h1 { font-size:16px; margin:0; font-weight:650; letter-spacing:.2px; }
+  header .sp { flex:1; }
+  header .who { font-size:13px; opacity:.9; }
+  header button { background:transparent; color:#fff; border:1px solid rgba(255,255,255,.35); }
+  main { max-width:1080px; margin:0 auto; padding:28px 24px 60px; }
+  button { font:inherit; padding:8px 14px; border-radius:8px; border:1px solid var(--line); background:#fff; color:var(--text); cursor:pointer; }
+  button.primary { background:var(--brand); border-color:var(--brand); color:#fff; }
+  button.danger { color:var(--bad); }
+  button:disabled { opacity:.5; cursor:default; }
+  .center { min-height:100vh; display:grid; place-items:center; padding:24px; }
+  .login { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:36px; max-width:420px; width:100%; text-align:center; box-shadow:0 10px 40px rgba(15,23,42,.06); }
+  .login h1 { font-size:22px; margin:0 0 6px; }
+  .login p { color:var(--muted); margin:0 0 22px; }
+  .gbtn { display:inline-flex; align-items:center; gap:10px; padding:10px 18px; font-weight:600; }
+  .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:16px; margin:8px 0 28px; }
+  .tile { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:22px; display:flex; flex-direction:column; gap:10px; }
+  .tile h2 { margin:0; font-size:18px; }
+  .tile p { margin:0; color:var(--muted); }
+  .tile .role { font-size:12px; color:var(--muted); }
+  .tile button { align-self:flex-start; margin-top:6px; }
+  .tile.off { opacity:.55; }
+  .tabs { display:flex; gap:6px; margin:0 0 16px; border-bottom:1px solid var(--line); }
+  .tabs button { border:none; border-bottom:2px solid transparent; border-radius:0; background:none; padding:10px 12px; color:var(--muted); }
+  .tabs button.on { color:var(--text); border-bottom-color:var(--brand); font-weight:600; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px; margin-bottom:16px; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { text-align:left; padding:9px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { font-size:12px; color:var(--muted); font-weight:600; }
+  .pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; background:#eef2ff; color:#3730a3; margin-right:4px; }
+  .pill.super_admin { background:#fef3c7; color:#92400e; }
+  .pill.admin { background:#dbeafe; color:#1e40af; }
+  .pill.user { background:#ecfdf5; color:#065f46; }
+  .pill.warn { background:#fff7ed; color:var(--warn); }
+  .muted { color:var(--muted); }
+  .err { color:var(--bad); }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  input[type=text], input[type=email], select { font:inherit; padding:8px 10px; border:1px solid var(--line); border-radius:8px; }
+  dialog { border:1px solid var(--line); border-radius:14px; padding:22px; width:min(460px,92vw); }
+  dialog label { display:block; margin:10px 0 4px; font-weight:600; font-size:13px; }
+  dialog input[type=text], dialog input[type=email], dialog select { width:100%; }
+  .stat { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin:10px 0; }
+  .stat div { background:#f8fafc; border:1px solid var(--line); border-radius:10px; padding:10px; }
+  .stat b { display:block; font-size:20px; }
+  pre { white-space:pre-wrap; background:#f8fafc; border:1px solid var(--line); border-radius:8px; padding:10px; font-size:12px; max-height:240px; overflow:auto; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="/api/config"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+(function () {
+  "use strict";
+  var $root = document.getElementById("root");
+  var SB, ME = null, TAB = "home";
+  var PORTALS = {
+    ttop: { name: "TTOP Portal", desc: "Technical Team Operational Portal: candidates, interviews, assessments, closers and incentives.", url: "/ttop/" },
+    dhruva: { name: "Dhruva Portal", desc: "Interview Operations Portal: call schedule, approvals, recovery, reports and incentives.", url: "/dhruva/" }
+  };
+  var ROLE_LABEL = { super_admin: "Super admin", admin: "Admin", user: "User" };
+  var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); };
+
+  function api(path, body, method) {
+    return fetch("/app/api/" + path, { method: method || (body ? "POST" : "GET"), headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined, credentials: "same-origin" })
+      .then(function (r) { return r.json().then(function (j) { if (!r.ok || j.ok === false) { var e = new Error(j.error || ("Request failed (" + r.status + ")")); e.status = r.status; throw e; } return j; }); });
+  }
+
+  function showLogin(msg) {
+    $root.innerHTML = '<div class="center"><div class="login"><h1>Interview Operations Portal</h1><p>TTOP and Dhruva portals in one place.</p>' +
+      (msg ? '<p class="err">' + esc(msg) + '</p>' : '') +
+      '<button class="primary gbtn" id="g">Sign in with Google</button></div></div>';
+    document.getElementById("g").onclick = function () {
+      try { sessionStorage.setItem("iop_next", nextTarget() || ""); } catch (e) {}
+      SB.auth.signInWithOAuth({ provider: "google", options: { redirectTo: location.origin + "/" } });
+    };
+  }
+  function showMessage(title, text, withSignOut) {
+    $root.innerHTML = '<div class="center"><div class="login"><h1>' + esc(title) + '</h1><p>' + esc(text) + '</p>' + (withSignOut ? '<button id="so">Sign out</button>' : '') + '</div></div>';
+    if (withSignOut) document.getElementById("so").onclick = signOut;
+  }
+
+  // Where the person wanted to go: ?next=/dhruva/ (sent by the server) or a TTOP alert link (/#i123)
+  function nextTarget() {
+    var q = new URLSearchParams(location.search).get("next");
+    if (q && /^\/(ttop|dhruva)\//.test(q)) return q;
+    var h = location.hash;
+    if (h && h.length > 1 && !/access_token|error=/.test(h)) return "/ttop/" + h;
+    return "";
+  }
+
+  function boot() {
+    var c = window.TTOP_CONFIG || {};
+    if (!c.url || !c.anon) return showMessage("Not configured", "Set SUPABASE_URL and SUPABASE_ANON_KEY on the server.");
+    SB = supabase.createClient(c.url, c.anon);
+    if (new URLSearchParams(location.search).get("signout") === "1") return signOut();
+    SB.auth.getSession().then(function (r) {
+      var session = r.data && r.data.session;
+      if (!session) return showLogin();
+      return api("login", { access_token: session.access_token }).then(function (j) {
+        ME = j.user;
+        if (history.replaceState && /access_token/.test(location.hash)) history.replaceState(null, "", "/" + location.search);
+        var next = nextTarget();
+        try { next = next || sessionStorage.getItem("iop_next") || ""; sessionStorage.removeItem("iop_next"); } catch (e) {}
+        var allowed = j.user.portals;
+        if (next) { var p = next.split("/")[1]; if (allowed.indexOf(p) >= 0) return openPortal(p, next); }
+        if (allowed.length === 1 && j.user.role === "user") return openPortal(allowed[0]);
+        render();
+      }).catch(function (e) {
+        if (e.status === 403) return showMessage("No access yet", (session.user && session.user.email ? session.user.email + " is" : "You are") + " signed in but not set up in the portal. Ask a super admin to add you.", true);
+        showLogin(e.message);
+      });
+    });
+  }
+
+  function signOut() {
+    api("logout", {}).catch(function () {}).then(function () {
+      try { localStorage.removeItem("interview_portal_session"); sessionStorage.removeItem("interview_portal_session"); } catch (e) {}
+      return SB.auth.signOut();
+    }).then(function () { location.href = "/"; });
+  }
+
+  function openPortal(p, url) {
+    if (p === "dhruva") {
+      var cur = ""; try { cur = localStorage.getItem("interview_portal_session") || ""; } catch (e) {}
+      return api("dhruva-session", { current: cur }).then(function (j) {
+        try { localStorage.setItem("interview_portal_session", j.token); } catch (e) {}
+        location.href = url || PORTALS.dhruva.url;
+      }).catch(function (e) { alert(e.message); render(); });
+    }
+    location.href = url || PORTALS[p].url;
+  }
+
+  function render() {
+    var canManage = ME.role === "super_admin" || ME.role === "admin";
+    var h = '<header><h1>Interview Operations Portal</h1><span class="sp"></span><span class="who">' + esc(ME.email) + ' · ' + ROLE_LABEL[ME.role] + '</span><button id="so">Sign out</button></header><main>';
+    if (canManage) h += '<div class="tabs"><button data-t="home" class="' + (TAB === "home" ? "on" : "") + '">Portals</button><button data-t="access" class="' + (TAB === "access" ? "on" : "") + '">Access</button>' +
+      (ME.role === "super_admin" ? '<button data-t="masters" class="' + (TAB === "masters" ? "on" : "") + '">Shared candidates &amp; clients</button>' : '') + '</div>';
+    h += '<div id="tab"></div></main>';
+    $root.innerHTML = h;
+    document.getElementById("so").onclick = signOut;
+    Array.prototype.forEach.call(document.querySelectorAll(".tabs button"), function (b) { b.onclick = function () { TAB = b.dataset.t; render(); }; });
+    if (TAB === "access") return renderAccess();
+    if (TAB === "masters") return renderMasters();
+    renderHome();
+  }
+
+  function renderHome() {
+    var t = '<div class="tiles">';
+    Object.keys(PORTALS).forEach(function (k) {
+      var ok = ME.portals.indexOf(k) >= 0, P = PORTALS[k];
+      t += '<div class="tile' + (ok ? "" : " off") + '"><h2>' + P.name + '</h2><p>' + P.desc + '</p>' +
+        (ok ? '<span class="role">You: ' + ROLE_LABEL[ME.role] + '</span><button class="primary" data-p="' + k + '">Open ' + P.name + '</button>' : '<span class="role">No access</span>') + '</div>';
+    });
+    t += '</div><p class="muted">Candidates and clients are shared: a change in one portal shows in the other. Interviews and incentives stay with each portal.</p>';
+    document.getElementById("tab").innerHTML = t;
+    Array.prototype.forEach.call(document.querySelectorAll("[data-p]"), function (b) { b.onclick = function () { b.disabled = true; b.textContent = "Opening…"; openPortal(b.dataset.p); }; });
+  }
+
+  /* ---------------- Access ---------------- */
+  function renderAccess() {
+    var tab = document.getElementById("tab");
+    tab.innerHTML = '<div class="card"><p class="muted">Loading…</p></div>';
+    api("users").then(function (j) {
+      var rows = j.users.map(function (u) {
+        var warn = u.dhruva && u.dhruva.problem ? '<div class="pill warn" title="' + esc(u.dhruva.problem) + '">Dhruva role mismatch</div>' : '';
+        var dh = u.dhruva && u.dhruva.known ? esc(u.dhruva.roles.join(", ") || "—") + (u.dhruva.active ? "" : " (inactive)") : '<span class="muted">not in Dhruva</span>';
+        return '<tr><td><b>' + esc(u.name || "") + '</b><div class="muted">' + esc(u.email) + '</div></td>' +
+          '<td><span class="pill ' + u.role + '">' + ROLE_LABEL[u.role] + '</span>' + (u.active ? "" : ' <span class="pill warn">off</span>') + '</td>' +
+          '<td>' + u.portals.map(function (p) { return '<span class="pill">' + (p === "ttop" ? "TTOP" : "Dhruva") + '</span>'; }).join("") + '</td>' +
+          '<td>' + dh + warn + '</td>' +
+          '<td>' + (u.canEdit ? '<button data-e="' + esc(u.email) + '">Edit</button>' : '') + '</td></tr>';
+      }).join("");
+      tab.innerHTML = '<div class="card"><div class="row" style="justify-content:space-between"><div><b>People and access</b><div class="muted">' +
+        (ME.role === "super_admin" ? "Super admins open both portals. Admins and users open the portals ticked for them." : "You can add and change users of your portal.") +
+        ' TTOP access follows this list automatically. Roles inside Dhruva are set in Dhruva Administration; the role here is the ceiling.</div></div>' +
+        '<button class="primary" id="add">Add person</button></div>' +
+        '<table style="margin-top:12px"><thead><tr><th>Person</th><th>Role</th><th>Portals</th><th>Dhruva role</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+      document.getElementById("add").onclick = function () { editUser(null, j.users); };
+      Array.prototype.forEach.call(tab.querySelectorAll("[data-e]"), function (b) { b.onclick = function () { editUser(j.users.find(function (u) { return u.email === b.dataset.e; }), j.users); }; });
+    }).catch(function (e) { tab.innerHTML = '<div class="card err">' + esc(e.message) + '</div>'; });
+  }
+
+  function editUser(u, all) {
+    var isNew = !u;
+    u = u || { email: "", name: "", role: "user", portals: ME.role === "admin" ? ME.portals.slice() : [], active: true };
+    var roles = ME.role === "super_admin" ? ["super_admin", "admin", "user"] : ["user"];
+    var portals = ME.role === "super_admin" ? ["ttop", "dhruva"] : ME.portals;
+    var d = document.createElement("dialog");
+    d.innerHTML = '<h3 style="margin-top:0">' + (isNew ? "Add person" : "Edit " + esc(u.email)) + '</h3>' +
+      '<label>Email</label><input type="email" id="f_email" value="' + esc(u.email) + '"' + (isNew ? "" : " disabled") + '>' +
+      '<label>Name</label><input type="text" id="f_name" value="' + esc(u.name || "") + '">' +
+      '<label>Role</label><select id="f_role">' + roles.map(function (r) { return '<option value="' + r + '"' + (r === u.role ? " selected" : "") + '>' + ROLE_LABEL[r] + '</option>'; }).join("") + '</select>' +
+      '<label>Portals</label><div id="f_portals">' + portals.map(function (p) { return '<label style="display:inline-flex;gap:6px;font-weight:400;margin-right:14px"><input type="checkbox" value="' + p + '"' + (u.portals.indexOf(p) >= 0 ? " checked" : "") + '>' + (p === "ttop" ? "TTOP" : "Dhruva") + '</label>'; }).join("") + '</div>' +
+      '<label style="display:flex;gap:6px;font-weight:400;margin-top:12px"><input type="checkbox" id="f_active"' + (u.active ? " checked" : "") + '> Active</label>' +
+      '<p class="muted" id="f_hint" style="font-size:12px">Super admins always get both portals.</p><p class="err" id="f_err"></p>' +
+      '<div class="row" style="justify-content:space-between;margin-top:8px">' + (isNew ? "<span></span>" : '<button class="danger" id="f_del">Remove</button>') +
+      '<div class="row"><button id="f_cancel">Cancel</button><button class="primary" id="f_save">Save</button></div></div>';
+    document.body.appendChild(d); d.showModal();
+    var close = function () { d.close(); d.remove(); };
+    d.querySelector("#f_cancel").onclick = close;
+    d.querySelector("#f_save").onclick = function () {
+      var body = {
+        email: d.querySelector("#f_email").value, name: d.querySelector("#f_name").value, role: d.querySelector("#f_role").value,
+        portals: Array.prototype.map.call(d.querySelectorAll("#f_portals input:checked"), function (x) { return x.value; }),
+        active: d.querySelector("#f_active").checked
+      };
+      api("users", body).then(function () { close(); renderAccess(); }).catch(function (e) { d.querySelector("#f_err").textContent = e.message; });
+    };
+    var del = d.querySelector("#f_del");
+    if (del) del.onclick = function () {
+      if (!confirm("Remove " + u.email + " from the portal? They lose access to both portals.")) return;
+      api("users?email=" + encodeURIComponent(u.email), null, "DELETE").then(function () { close(); renderAccess(); }).catch(function (e) { d.querySelector("#f_err").textContent = e.message; });
+    };
+  }
+
+  /* ---------------- Shared masters ---------------- */
+  function renderMasters() {
+    var tab = document.getElementById("tab");
+    tab.innerHTML = '<div class="card"><p class="muted">Loading…</p></div>';
+    api("masters").then(function (j) {
+      var rep = j.report, part = function (k, label) {
+        var p = rep && rep[k];
+        if (!p) return '';
+        return '<h3>' + label + '</h3><div class="stat"><div><b>' + p.dhruvaRows + '</b>in Dhruva</div><div><b>' + p.ttopRows + '</b>in TTOP</div><div><b>' + p.linked + '</b>already paired</div>' +
+          '<div><b>' + p.toLink + '</b>to pair</div><div><b>' + p.addToTtop + '</b>to add to TTOP</div><div><b>' + p.addToDhruva + '</b>to add to Dhruva</div>' +
+          '<div><b>' + p.renameInTtop + '</b>renames in TTOP</div><div><b>' + p.renameInDhruva + '</b>renames in Dhruva</div></div>' +
+          '<details><summary class="muted">Examples</summary><pre>' + esc(JSON.stringify(p.examples, null, 1)) + '</pre></details>' +
+          (p.conflicts.length ? '<pre>' + esc(p.conflicts.join("\n")) + '</pre>' : '');
+      };
+      var modeText = { report: "Report only: nothing is changed yet. Review the numbers below, then turn sync on.", on: "On: changes in either portal are copied to the other every few seconds.", off: "Off: the portals' candidates and clients are not kept in sync." }[j.mode];
+      tab.innerHTML = '<div class="card"><b>Shared candidates &amp; clients</b><p class="muted">' + modeText + '</p><div class="row">' +
+        (j.mode !== "on" ? '<button class="primary" data-m="on">Turn sync on</button>' : '<button data-m="off">Pause sync</button>') +
+        (j.mode !== "report" ? '<button data-m="report">Report only</button>' : '') + '<button id="run">Check now</button></div>' +
+        (rep ? '<p class="muted">Last check: ' + esc(new Date(rep.at).toLocaleString()) + (rep.applied ? " (applied)" : " (report)") + '</p>' + part("candidate", "Candidates") + part("client", "Clients") +
+          (rep.errors.length ? '<h3>Problems</h3><pre>' + esc(rep.errors.join("\n")) + '</pre>' : '') : '<p class="muted">No check has run yet.</p>') + '</div>';
+      Array.prototype.forEach.call(tab.querySelectorAll("[data-m]"), function (b) {
+        b.onclick = function () {
+          if (b.dataset.m === "on" && !confirm("Turn on sync? Missing candidates and clients are added to the other portal and renames are copied both ways.")) return;
+          api("masters", { mode: b.dataset.m }).then(renderMasters).catch(function (e) { alert(e.message); });
+        };
+      });
+      document.getElementById("run").onclick = function () { this.disabled = true; this.textContent = "Checking…"; api("masters", { run: true }).then(renderMasters).catch(function (e) { alert(e.message); renderMasters(); }); };
+    }).catch(function (e) { tab.innerHTML = '<div class="card err">' + esc(e.message) + '</div>'; });
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>

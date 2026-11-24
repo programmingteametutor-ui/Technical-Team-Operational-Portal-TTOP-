@@ -1,0 +1,1535 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+  <base target="_top">
+
+  <meta
+    charset="UTF-8"
+  >
+
+  <style>
+
+    :root{
+      --navy:#071a46;
+      --navy2:#0c2b70;
+      --blue:#1457ff;
+      --blue2:#4c47ff;
+      --text:#0f172a;
+      --muted:#64748b;
+      --line:#dbe3f1;
+      --soft:#f5f8ff;
+      --green:#10b981;
+      --danger:#dc2626;
+      --white:#ffffff;
+    }
+
+    *{
+      box-sizing:border-box;
+    }
+
+    body{
+      margin:0;
+      min-height:100vh;
+      font-family:
+        Inter,
+        Arial,
+        Helvetica,
+        sans-serif;
+      color:var(--text);
+      background:
+        radial-gradient(
+          circle at 75% 15%,
+          rgba(72,101,255,.18),
+          transparent 27%
+        ),
+        linear-gradient(
+          135deg,
+          #06163c 0%,
+          #0a286c 48%,
+          #071a46 100%
+        );
+    }
+
+    button,
+    input{
+      font:inherit;
+    }
+
+    .page{
+      min-height:100vh;
+      display:grid;
+      grid-template-columns:
+        minmax(320px, 1fr)
+        minmax(420px, 560px);
+      align-items:center;
+      gap:48px;
+      max-width:1280px;
+      margin:auto;
+      padding:54px;
+    }
+
+    .brand-panel{
+      color:white;
+      padding:24px;
+    }
+
+    .brand-row{
+      display:flex;
+      align-items:center;
+      gap:16px;
+      margin-bottom:42px;
+    }
+
+    .logo{
+      width:58px;
+      height:58px;
+      border-radius:18px;
+      display:grid;
+      place-items:center;
+      font-size:30px;
+      background:
+        linear-gradient(
+          135deg,
+          #175dff,
+          #6f45ff
+        );
+      box-shadow:
+        0 14px 35px
+        rgba(0,0,0,.22);
+    }
+
+    .brand-title{
+      margin:0;
+      font-size:29px;
+      font-weight:800;
+      letter-spacing:-.4px;
+    }
+
+    .brand-subtitle{
+      margin:6px 0 0;
+      color:#c8d5ff;
+      font-size:14px;
+    }
+
+    .hero{
+      max-width:620px;
+    }
+
+    .hero h1{
+      font-size:48px;
+      line-height:1.08;
+      letter-spacing:-1.4px;
+      margin:0 0 18px;
+    }
+
+    .hero p{
+      margin:0;
+      color:#c6d3fa;
+      font-size:18px;
+      line-height:1.65;
+      max-width:570px;
+    }
+
+    .feature-grid{
+      display:grid;
+      grid-template-columns:
+        repeat(2,minmax(0,1fr));
+      gap:14px;
+      margin-top:34px;
+      max-width:560px;
+    }
+
+    .feature{
+      padding:15px 17px;
+      border:
+        1px solid
+        rgba(255,255,255,.13);
+      background:
+        rgba(255,255,255,.07);
+      border-radius:15px;
+      color:#e7edff;
+      font-size:14px;
+      backdrop-filter:
+        blur(8px);
+    }
+
+    .feature strong{
+      color:white;
+    }
+
+    .card{
+      background:
+        rgba(255,255,255,.985);
+      border-radius:28px;
+      padding:36px;
+      box-shadow:
+        0 28px 70px
+        rgba(1,10,35,.35);
+      border:
+        1px solid
+        rgba(255,255,255,.55);
+    }
+
+    .secure-badge{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      background:#edfdf6;
+      color:#047857;
+      border:1px solid #c6f4df;
+      border-radius:999px;
+      padding:8px 12px;
+      font-size:12px;
+      font-weight:700;
+      margin-bottom:20px;
+    }
+
+    .card h2{
+      margin:0;
+      font-size:29px;
+      letter-spacing:-.6px;
+    }
+
+    .card-lead{
+      color:var(--muted);
+      font-size:14px;
+      line-height:1.55;
+      margin:
+        9px 0 27px;
+    }
+
+    .label{
+      display:block;
+      margin-bottom:8px;
+      font-size:13px;
+      font-weight:700;
+      color:#334155;
+    }
+
+    .input{
+      width:100%;
+      border:
+        1px solid
+        var(--line);
+      border-radius:14px;
+      padding:15px 16px;
+      outline:none;
+      background:white;
+      transition:.2s;
+      color:var(--text);
+    }
+
+    .input:focus{
+      border-color:#4c65ff;
+      box-shadow:
+        0 0 0 4px
+        rgba(61,92,255,.10);
+    }
+
+    .otp-input{
+      letter-spacing:10px;
+      text-align:center;
+      font-size:25px;
+      font-weight:800;
+    }
+
+    .primary{
+      width:100%;
+      border:0;
+      margin-top:17px;
+      border-radius:14px;
+      padding:15px 18px;
+      color:white;
+      font-weight:800;
+      cursor:pointer;
+      background:
+        linear-gradient(
+          90deg,
+          var(--blue),
+          var(--blue2)
+        );
+      box-shadow:
+        0 12px 25px
+        rgba(54,72,255,.25);
+      transition:
+        transform .15s,
+        opacity .15s;
+    }
+
+    .primary:hover{
+      transform:
+        translateY(-1px);
+    }
+
+    .primary:disabled{
+      opacity:.55;
+      cursor:not-allowed;
+      transform:none;
+    }
+
+    .secondary{
+      width:100%;
+      margin-top:10px;
+      border:
+        1px solid
+        var(--line);
+      border-radius:14px;
+      padding:13px 18px;
+      background:white;
+      color:#334155;
+      font-weight:700;
+      cursor:pointer;
+    }
+
+    .message{
+      display:none;
+      margin-top:16px;
+      padding:12px 14px;
+      border-radius:12px;
+      font-size:13px;
+      line-height:1.45;
+    }
+
+    .message.show{
+      display:block;
+    }
+
+    .message.error{
+      background:#fff1f2;
+      color:#b91c1c;
+      border:
+        1px solid
+        #fecdd3;
+    }
+
+    .message.success{
+      background:#effcf6;
+      color:#047857;
+      border:
+        1px solid
+        #bbf7d0;
+    }
+
+    .hint{
+      margin-top:20px;
+      font-size:12px;
+      line-height:1.5;
+      color:#94a3b8;
+      text-align:center;
+    }
+
+    .hidden{
+      display:none !important;
+    }
+
+    .loading{
+      display:none;
+      align-items:center;
+      justify-content:center;
+      gap:10px;
+      padding:16px 0 4px;
+      color:#64748b;
+      font-size:13px;
+    }
+
+    .loading.show{
+      display:flex;
+    }
+
+    .spinner{
+      width:19px;
+      height:19px;
+      border:
+        3px solid
+        #dfe7ff;
+      border-top-color:
+        var(--blue);
+      border-radius:50%;
+      animation:
+        spin .8s linear infinite;
+    }
+
+    @keyframes spin{
+      to{
+        transform:
+          rotate(360deg);
+      }
+    }
+
+    .verified{
+      text-align:center;
+    }
+
+    .verified-icon{
+      width:82px;
+      height:82px;
+      margin:
+        0 auto 20px;
+      display:grid;
+      place-items:center;
+      border-radius:26px;
+      background:
+        linear-gradient(
+          135deg,
+          #d9fbeb,
+          #ebf5ff
+        );
+      font-size:40px;
+    }
+
+    .role-pill{
+      display:inline-flex;
+      padding:8px 14px;
+      border-radius:999px;
+      margin-top:14px;
+      font-size:12px;
+      font-weight:800;
+      color:#1646c8;
+      background:#edf3ff;
+      border:1px solid #ceddff;
+    }
+
+    .user-box{
+      margin-top:22px;
+      text-align:left;
+      border:
+        1px solid
+        var(--line);
+      border-radius:16px;
+      padding:15px 17px;
+      background:#f8faff;
+    }
+
+    .user-row{
+      display:flex;
+      justify-content:space-between;
+      gap:15px;
+      padding:7px 0;
+      font-size:13px;
+    }
+
+    .user-row span:first-child{
+      color:var(--muted);
+    }
+
+    .next-banner{
+      margin-top:18px;
+      padding:14px 16px;
+      border-radius:14px;
+      background:#f1f5ff;
+      color:#3652a4;
+      font-size:13px;
+      line-height:1.5;
+    }
+
+    @media(max-width:900px){
+
+      .page{
+        grid-template-columns:1fr;
+        padding:28px;
+        gap:22px;
+      }
+
+      .hero h1{
+        font-size:35px;
+      }
+
+      .feature-grid{
+        display:none;
+      }
+
+      .brand-panel{
+        padding:
+          5px 5px 12px;
+      }
+
+      .brand-row{
+        margin-bottom:20px;
+      }
+
+    }
+
+    @media(max-width:520px){
+
+      .page{
+        padding:15px;
+      }
+
+      .card{
+        padding:25px 20px;
+        border-radius:22px;
+      }
+
+      .hero{
+        display:none;
+      }
+
+      .brand-panel{
+        padding-top:7px;
+      }
+
+      .brand-title{
+        font-size:21px;
+      }
+
+      .logo{
+        width:48px;
+        height:48px;
+        border-radius:15px;
+      }
+
+    }
+
+  </style>
+
+</head>
+
+<body>
+
+  <main class="page">
+
+    <section class="brand-panel">
+
+      <div class="brand-row">
+
+        <div class="logo">
+          🏆
+        </div>
+
+        <div>
+
+          <div class="brand-title">
+            Interview Incentive Portal
+          </div>
+
+          <div class="brand-subtitle">
+            Smart Tracking · Monthly Rewards · Team Performance
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <div class="hero">
+
+        <h1>
+          One secure place for your incentive performance.
+        </h1>
+
+        <p>
+          Admins can review the complete team.
+          Handlers are securely restricted to their own
+          incentive information.
+        </p>
+
+
+        <div class="feature-grid">
+
+          <div class="feature">
+            🔐 <strong>Email OTP</strong><br>
+            Secure personal sign-in
+          </div>
+
+          <div class="feature">
+            👤 <strong>Role Based</strong><br>
+            Admin and handler access
+          </div>
+
+          <div class="feature">
+            📅 <strong>Monthly View</strong><br>
+            July, August and future months
+          </div>
+
+          <div class="feature">
+            📊 <strong>Expandable</strong><br>
+            Call management can be added later
+          </div>
+
+        </div>
+
+      </div>
+
+    </section>
+
+
+    <section class="card">
+
+
+      <!-- EMAIL STEP -->
+
+      <div id="emailStep">
+
+        <div class="secure-badge">
+          ● Secure Portal Access
+        </div>
+
+        <h2>
+          Sign in
+        </h2>
+
+        <p class="card-lead">
+          Enter the personal email address registered
+          for your portal account.
+        </p>
+
+        <label
+          class="label"
+          for="emailInput"
+        >
+          Email address
+        </label>
+
+        <input
+          id="emailInput"
+          class="input"
+          type="email"
+          autocomplete="email"
+          placeholder="you@gmail.com"
+        >
+
+        <button
+          id="sendOtpButton"
+          class="primary"
+          type="button"
+          onclick="sendOtp()"
+        >
+          Send verification code
+        </button>
+
+        <div
+          id="emailMessage"
+          class="message"
+        ></div>
+
+        <div
+          id="emailLoading"
+          class="loading"
+        >
+          <div class="spinner"></div>
+          Sending secure code...
+        </div>
+
+        <div class="hint">
+          Only email addresses approved by the administrator
+          can access this portal.
+        </div>
+
+      </div>
+
+
+      <!-- OTP STEP -->
+
+      <div
+        id="otpStep"
+        class="hidden"
+      >
+
+        <div class="secure-badge">
+          ✉ Email Verification
+        </div>
+
+        <h2>
+          Enter your code
+        </h2>
+
+        <p
+          id="otpLead"
+          class="card-lead"
+        >
+          We sent a 6-digit verification code to your email.
+        </p>
+
+        <label
+          class="label"
+          for="otpInput"
+        >
+          Verification code
+        </label>
+
+        <input
+          id="otpInput"
+          class="input otp-input"
+          type="text"
+          inputmode="numeric"
+          maxlength="6"
+          autocomplete="one-time-code"
+          placeholder="••••••"
+        >
+
+        <button
+          id="verifyButton"
+          class="primary"
+          type="button"
+          onclick="verifyOtp()"
+        >
+          Verify & sign in
+        </button>
+
+        <button
+          class="secondary"
+          type="button"
+          onclick="backToEmail()"
+        >
+          Use another email
+        </button>
+
+        <div
+          id="otpMessage"
+          class="message"
+        ></div>
+
+        <div
+          id="otpLoading"
+          class="loading"
+        >
+          <div class="spinner"></div>
+          Verifying...
+        </div>
+
+        <div class="hint">
+          Verification codes expire after 10 minutes.
+        </div>
+
+      </div>
+
+
+      <!-- VERIFIED STEP -->
+
+      <div
+        id="verifiedStep"
+        class="verified hidden"
+      >
+
+        <div class="verified-icon">
+          ✓
+        </div>
+
+        <h2>
+          Access verified
+        </h2>
+
+        <p class="card-lead">
+          Your portal identity and access role were verified
+          successfully.
+        </p>
+
+        <div
+          id="rolePill"
+          class="role-pill"
+        >
+          Handler Access
+        </div>
+
+        <div class="user-box">
+
+          <div class="user-row">
+            <span>Handler</span>
+            <strong id="verifiedHandler">—</strong>
+          </div>
+
+          <div class="user-row">
+            <span>Email</span>
+            <strong id="verifiedEmail">—</strong>
+          </div>
+
+          <div class="user-row">
+            <span>Role</span>
+            <strong id="verifiedRole">—</strong>
+          </div>
+
+        </div>
+
+        <div class="next-banner">
+          Authentication is working. In Phase 2,
+          this screen will open the full polished dashboard
+          and the server will return only the data permitted
+          for this role.
+        </div>
+
+        <button
+          class="secondary"
+          type="button"
+          onclick="logout()"
+        >
+          Sign out
+        </button>
+
+      </div>
+
+
+      <!-- INITIAL SESSION CHECK -->
+
+      <div
+        id="startupLoading"
+        class="loading"
+      >
+        <div class="spinner"></div>
+        Checking secure session...
+      </div>
+
+
+    </section>
+
+  </main>
+
+
+  <script>
+
+    let currentEmail = "";
+
+    const TOKEN_KEY =
+      "interview_portal_session";
+
+
+    //--------------------------------------------------
+    // PAGE STARTUP
+    //--------------------------------------------------
+
+    window.addEventListener(
+      "load",
+      function(){
+
+        document
+          .getElementById(
+            "emailInput"
+          )
+          .addEventListener(
+            "keydown",
+            function(event){
+
+              if(
+                event.key ===
+                "Enter"
+              ){
+
+                sendOtp();
+
+              }
+
+            }
+          );
+
+
+        document
+          .getElementById(
+            "otpInput"
+          )
+          .addEventListener(
+            "input",
+            function(){
+
+              this.value =
+                this.value
+                  .replace(
+                    /\D/g,
+                    ""
+                  )
+                  .slice(
+                    0,
+                    6
+                  );
+
+            }
+          );
+
+
+        document
+          .getElementById(
+            "otpInput"
+          )
+          .addEventListener(
+            "keydown",
+            function(event){
+
+              if(
+                event.key ===
+                "Enter"
+              ){
+
+                verifyOtp();
+
+              }
+
+            }
+          );
+
+
+        checkExistingSession();
+
+      }
+    );
+
+
+    //--------------------------------------------------
+    // CHECK SESSION
+    //--------------------------------------------------
+
+    function checkExistingSession(){
+
+      const token =
+        sessionStorage.getItem(
+          TOKEN_KEY
+        );
+
+
+      if(!token){
+
+        return;
+
+      }
+
+
+      setStartupLoading(
+        true
+      );
+
+
+      google.script.run
+        .withSuccessHandler(
+          function(result){
+
+            setStartupLoading(
+              false
+            );
+
+
+            if(
+              result &&
+              result.ok
+            ){
+
+              showVerified(
+                result.user
+              );
+
+              return;
+
+            }
+
+
+            sessionStorage
+              .removeItem(
+                TOKEN_KEY
+              );
+
+          }
+        )
+        .withFailureHandler(
+          function(){
+
+            setStartupLoading(
+              false
+            );
+
+            sessionStorage
+              .removeItem(
+                TOKEN_KEY
+              );
+
+          }
+        )
+        .getPortalSession(
+          token
+        );
+
+    }
+
+
+    //--------------------------------------------------
+    // SEND OTP
+    //--------------------------------------------------
+
+    function sendOtp(){
+
+      const email =
+        document
+          .getElementById(
+            "emailInput"
+          )
+          .value
+          .trim();
+
+
+      if(!email){
+
+        showMessage(
+          "emailMessage",
+          "Enter your email address.",
+          "error"
+        );
+
+        return;
+
+      }
+
+
+      setButtonDisabled(
+        "sendOtpButton",
+        true
+      );
+
+
+      setLoading(
+        "emailLoading",
+        true
+      );
+
+
+      clearMessage(
+        "emailMessage"
+      );
+
+
+      google.script.run
+        .withSuccessHandler(
+          function(result){
+
+            setButtonDisabled(
+              "sendOtpButton",
+              false
+            );
+
+
+            setLoading(
+              "emailLoading",
+              false
+            );
+
+
+            if(
+              !result ||
+              !result.ok
+            ){
+
+              showMessage(
+                "emailMessage",
+                (
+                  result &&
+                  result.message
+                )
+                  ? result.message
+                  : "Unable to send the code.",
+                "error"
+              );
+
+              return;
+
+            }
+
+
+            currentEmail =
+              email;
+
+
+            document
+              .getElementById(
+                "otpLead"
+              )
+              .textContent =
+                "Enter the 6-digit verification code sent to " +
+                email +
+                ".";
+
+
+            document
+              .getElementById(
+                "emailStep"
+              )
+              .classList
+              .add(
+                "hidden"
+              );
+
+
+            document
+              .getElementById(
+                "otpStep"
+              )
+              .classList
+              .remove(
+                "hidden"
+              );
+
+
+            document
+              .getElementById(
+                "otpInput"
+              )
+              .focus();
+
+          }
+        )
+        .withFailureHandler(
+          function(error){
+
+            setButtonDisabled(
+              "sendOtpButton",
+              false
+            );
+
+
+            setLoading(
+              "emailLoading",
+              false
+            );
+
+
+            showMessage(
+              "emailMessage",
+              error &&
+              error.message
+                ? error.message
+                : "Unable to send the verification code.",
+              "error"
+            );
+
+          }
+        )
+        .sendPortalOtp(
+          email
+        );
+
+    }
+
+
+    //--------------------------------------------------
+    // VERIFY OTP
+    //--------------------------------------------------
+
+    function verifyOtp(){
+
+      const otp =
+        document
+          .getElementById(
+            "otpInput"
+          )
+          .value
+          .trim();
+
+
+      if(
+        !currentEmail ||
+        !/^\d{6}$/.test(
+          otp
+        )
+      ){
+
+        showMessage(
+          "otpMessage",
+          "Enter the 6-digit verification code.",
+          "error"
+        );
+
+        return;
+
+      }
+
+
+      setButtonDisabled(
+        "verifyButton",
+        true
+      );
+
+
+      setLoading(
+        "otpLoading",
+        true
+      );
+
+
+      clearMessage(
+        "otpMessage"
+      );
+
+
+      google.script.run
+        .withSuccessHandler(
+          function(result){
+
+            setButtonDisabled(
+              "verifyButton",
+              false
+            );
+
+
+            setLoading(
+              "otpLoading",
+              false
+            );
+
+
+            if(
+              !result ||
+              !result.ok
+            ){
+
+              showMessage(
+                "otpMessage",
+                (
+                  result &&
+                  result.message
+                )
+                  ? result.message
+                  : "Verification failed.",
+                "error"
+              );
+
+              return;
+
+            }
+
+
+            sessionStorage
+              .setItem(
+                TOKEN_KEY,
+                result.token
+              );
+
+
+            showVerified(
+              result.user
+            );
+
+          }
+        )
+        .withFailureHandler(
+          function(error){
+
+            setButtonDisabled(
+              "verifyButton",
+              false
+            );
+
+
+            setLoading(
+              "otpLoading",
+              false
+            );
+
+
+            showMessage(
+              "otpMessage",
+              error &&
+              error.message
+                ? error.message
+                : "Verification failed.",
+              "error"
+            );
+
+          }
+        )
+        .verifyPortalOtp(
+          currentEmail,
+          otp
+        );
+
+    }
+
+
+    //--------------------------------------------------
+    // SHOW VERIFIED
+    //--------------------------------------------------
+
+    function showVerified(
+      user
+    ){
+
+      document
+        .getElementById(
+          "emailStep"
+        )
+        .classList
+        .add(
+          "hidden"
+        );
+
+
+      document
+        .getElementById(
+          "otpStep"
+        )
+        .classList
+        .add(
+          "hidden"
+        );
+
+
+      document
+        .getElementById(
+          "verifiedStep"
+        )
+        .classList
+        .remove(
+          "hidden"
+        );
+
+
+      document
+        .getElementById(
+          "verifiedHandler"
+        )
+        .textContent =
+          user.handler ||
+          "—";
+
+
+      document
+        .getElementById(
+          "verifiedEmail"
+        )
+        .textContent =
+          user.email ||
+          "—";
+
+
+      document
+        .getElementById(
+          "verifiedRole"
+        )
+        .textContent =
+          user.role ||
+          "—";
+
+
+      const rolePill =
+        document
+          .getElementById(
+            "rolePill"
+          );
+
+
+      rolePill.textContent =
+        (
+          user.role ===
+          "Admin"
+        )
+          ? "Admin Access"
+          : "Handler Access";
+
+    }
+
+
+    //--------------------------------------------------
+    // BACK
+    //--------------------------------------------------
+
+    function backToEmail(){
+
+      currentEmail = "";
+
+
+      document
+        .getElementById(
+          "otpInput"
+        )
+        .value =
+          "";
+
+
+      clearMessage(
+        "otpMessage"
+      );
+
+
+      document
+        .getElementById(
+          "otpStep"
+        )
+        .classList
+        .add(
+          "hidden"
+        );
+
+
+      document
+        .getElementById(
+          "emailStep"
+        )
+        .classList
+        .remove(
+          "hidden"
+        );
+
+
+      document
+        .getElementById(
+          "emailInput"
+        )
+        .focus();
+
+    }
+
+
+    //--------------------------------------------------
+    // LOGOUT
+    //--------------------------------------------------
+
+    function logout(){
+
+      const token =
+        sessionStorage.getItem(
+          TOKEN_KEY
+        );
+
+
+      sessionStorage
+        .removeItem(
+          TOKEN_KEY
+        );
+
+
+      currentEmail =
+        "";
+
+
+      document
+        .getElementById(
+          "verifiedStep"
+        )
+        .classList
+        .add(
+          "hidden"
+        );
+
+
+      document
+        .getElementById(
+          "emailStep"
+        )
+        .classList
+        .remove(
+          "hidden"
+        );
+
+
+      document
+        .getElementById(
+          "emailInput"
+        )
+        .value =
+          "";
+
+
+      document
+        .getElementById(
+          "otpInput"
+        )
+        .value =
+          "";
+
+
+      if(token){
+
+        google.script.run
+          .logoutPortal(
+            token
+          );
+
+      }
+
+    }
+
+
+    //--------------------------------------------------
+    // UI HELPERS
+    //--------------------------------------------------
+
+    function showMessage(
+      id,
+      text,
+      type
+    ){
+
+      const el =
+        document
+          .getElementById(
+            id
+          );
+
+
+      el.textContent =
+        text;
+
+
+      el.className =
+        "message show " +
+        type;
+
+    }
+
+
+    function clearMessage(
+      id
+    ){
+
+      const el =
+        document
+          .getElementById(
+            id
+          );
+
+
+      el.textContent =
+        "";
+
+
+      el.className =
+        "message";
+
+    }
+
+
+    function setLoading(
+      id,
+      visible
+    ){
+
+      const el =
+        document
+          .getElementById(
+            id
+          );
+
+
+      el.classList
+        .toggle(
+          "show",
+          !!visible
+        );
+
+    }
+
+
+    function setStartupLoading(
+      visible
+    ){
+
+      setLoading(
+        "startupLoading",
+        visible
+      );
+
+    }
+
+
+    function setButtonDisabled(
+      id,
+      disabled
+    ){
+
+      document
+        .getElementById(
+          id
+        )
+        .disabled =
+          !!disabled;
+
+    }
+
+  </script>
+
+</body>
+</html>
+

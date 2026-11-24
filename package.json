@@ -1,0 +1,19 @@
+{
+  "name": "interview-operations-portal",
+  "version": "2.1.0",
+  "private": true,
+  "description": "One app for the TTOP and Dhruva portals on Vercel + Supabase: one Google sign-in, one database, roles across both. Both portals run unchanged.",
+  "main": "server/index.js",
+  "engines": {
+    "node": "22.x"
+  },
+  "scripts": {
+    "start": "TZ=Asia/Kolkata node server/index.js",
+    "check": "node scripts/check.js",
+    "test:ttop": "node --test portals/ttop/test/*.test.js"
+  },
+  "dependencies": {
+    "mysql2": "3.11.3",
+    "web-push": "3.6.7"
+  }
+}

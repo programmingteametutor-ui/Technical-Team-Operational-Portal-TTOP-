@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sheets – Interview Operations Portal</title>
+<style>
+  :root { --line:#dfe3ea; --head:#f3f5f9; --sel:#1457ff; --text:#1d2433; --muted:#667085; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:13px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif; color:var(--text); background:#fff; height:100vh; display:flex; flex-direction:column; }
+  header { display:flex; gap:8px; align-items:center; padding:8px 12px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  header h1 { font-size:15px; margin:0 12px 0 0; }
+  select, button, input { font:inherit; }
+  select, input[type=text] { padding:5px 8px; border:1px solid var(--line); border-radius:6px; }
+  button { padding:5px 10px; border:1px solid var(--line); border-radius:6px; background:#fff; cursor:pointer; }
+  button:hover { background:#f5f7fb; }
+  button.primary { background:var(--sel); color:#fff; border-color:var(--sel); }
+  .muted { color:var(--muted); }
+  #formula { display:flex; gap:8px; align-items:center; padding:6px 12px; border-bottom:1px solid var(--line); }
+  #cellRef { width:80px; font-weight:600; }
+  #cellInput { flex:1; }
+  #gridWrap { flex:1; overflow:auto; position:relative; }
+  table { border-collapse:separate; border-spacing:0; table-layout:fixed; }
+  th, td { border-right:1px solid var(--line); border-bottom:1px solid var(--line); padding:3px 6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; height:24px; max-width:420px; }
+  thead th { position:sticky; top:0; background:var(--head); z-index:2; font-weight:600; color:var(--muted); text-align:center; }
+  tbody th { position:sticky; left:0; background:var(--head); z-index:1; color:var(--muted); font-weight:500; text-align:right; min-width:52px; }
+  thead th.corner { left:0; z-index:3; }
+  tr.frozen td { background:#fafbfd; font-weight:600; }
+  td.sel { outline:2px solid var(--sel); outline-offset:-2px; }
+  #tabs { display:flex; gap:2px; padding:4px 8px; border-top:1px solid var(--line); overflow-x:auto; background:var(--head); }
+  #tabs button { border:none; background:transparent; border-radius:4px; white-space:nowrap; }
+  #tabs button.active { background:#fff; box-shadow:0 0 0 1px var(--line); font-weight:600; }
+  #status { padding:4px 12px; font-size:12px; color:var(--muted); border-top:1px solid var(--line); min-height:24px; }
+  .menu { position:relative; }
+  .menu > div { display:none; position:absolute; top:100%; left:0; background:#fff; border:1px solid var(--line); border-radius:6px; box-shadow:0 6px 24px rgba(0,0,0,.12); min-width:260px; z-index:10; padding:4px 0; }
+  .menu.open > div { display:block; }
+  .menu a { display:block; padding:6px 12px; color:inherit; text-decoration:none; cursor:pointer; }
+  .menu a:hover { background:#f2f5ff; }
+  .menu hr { border:none; border-top:1px solid var(--line); margin:4px 0; }
+  .menu .label { padding:6px 12px; font-weight:600; color:var(--muted); font-size:12px; }
+  dialog { border:1px solid var(--line); border-radius:10px; max-width:720px; width:90vw; }
+  dialog pre { white-space:pre-wrap; max-height:50vh; overflow:auto; background:#f7f8fa; padding:8px; border-radius:6px; font-size:12px; }
+  #login { padding:40px; text-align:center; }
+</style>
+</head>
+<body>
+<div id="login" hidden>
+  <h2>Sign in required</h2>
+  <p class="muted" id="loginMsg">Open the portal and sign in first. This page uses your portal session.</p>
+  <p><a href="/">Go to the portal</a></p>
+</div>
+<header id="top" hidden>
+  <h1>Sheets</h1>
+  <select id="wbSel" aria-label="Spreadsheet"></select>
+  <span class="menu" id="menus"></span>
+  <span style="flex:1"></span>
+  <button id="btnInsert" title="Insert rows above the selected row">Insert row</button>
+  <button id="btnDelete" title="Delete the selected row">Delete row</button>
+  <button id="btnClear" title="Clear the selected cell">Clear cell</button>
+  <button id="btnReload">Reload</button>
+  <span class="muted" id="who"></span>
+</header>
+<div id="formula" hidden>
+  <input id="cellRef" type="text" readonly aria-label="Cell">
+  <input id="cellInput" type="text" placeholder="Select a cell, type a value, press Enter. Paste (Ctrl+V) pastes a block from Excel/Sheets." aria-label="Cell value">
+</div>
+<div id="gridWrap" hidden><table id="grid"><thead></thead><tbody></tbody></table></div>
+<div id="tabs" hidden></div>
+<div id="status"></div>
+<dialog id="dlg"><h3 id="dlgTitle"></h3><div id="dlgBody"></div><form method="dialog" id="dlgForm" style="text-align:right;margin-top:12px"></form></dialog>
+
+<script>
+(function () {
+  "use strict";
+  var TOKEN = localStorage.getItem("interview_portal_session") || sessionStorage.getItem("interview_portal_session") || "";
+  var state = { workbooks: [], wb: null, sheet: null, rows: [], cols: 0, lastRow: 0, from: 1, sel: null, menus: [] };
+  var PAGE = 300;
+  var $ = function (id) { return document.getElementById(id); };
+
+  function api(path, body) {
+    return fetch("/api/sheets/" + path, {
+      method: body ? "POST" : "GET",
+      headers: { "Content-Type": "application/json", "X-Portal-Token": TOKEN },
+      body: body ? JSON.stringify(body) : undefined
+    }).then(function (r) { return r.json().then(function (j) { if (!j.ok) { var e = new Error(j.error || "Request failed"); e.status = r.status; throw e; } return j; }); });
+  }
+  function status(msg) { $("status").textContent = msg || ""; }
+  function colName(c) { var s = ""; while (c > 0) { var m = (c - 1) % 26; s = String.fromCharCode(65 + m) + s; c = Math.floor((c - 1) / 26); } return s; }
+  function showLogin(msg) { $("login").hidden = false; if (msg) $("loginMsg").textContent = msg; }
+
+  function boot() {
+    if (!TOKEN) return showLogin();
+    api("workbooks").then(function (j) {
+      state.workbooks = j.workbooks;
+      $("who").textContent = j.user.email;
+      ["top", "formula", "gridWrap", "tabs"].forEach(function (id) { $(id).hidden = false; });
+      var sel = $("wbSel"); sel.innerHTML = "";
+      j.workbooks.forEach(function (w) { var o = document.createElement("option"); o.value = w.id; o.textContent = w.title; sel.appendChild(o); });
+      var hash = decodeURIComponent(location.hash.replace(/^#/, ""));
+      if (hash && j.workbooks.some(function (w) { return w.id === hash; })) sel.value = hash;
+      openWorkbook(sel.value);
+    }).catch(function (e) { showLogin(e.message); });
+  }
+
+  function openWorkbook(id, sheetName) {
+    state.wb = state.workbooks.find(function (w) { return w.id === id; });
+    if (history.replaceState) history.replaceState(null, "", "#" + encodeURIComponent(id));
+    var tabs = $("tabs"); tabs.innerHTML = "";
+    state.wb.sheets.forEach(function (s) {
+      var b = document.createElement("button"); b.textContent = s.name + (s.hidden ? " (hidden)" : "");
+      b.onclick = function () { openSheet(s.name); }; b.dataset.name = s.name; tabs.appendChild(b);
+    });
+    loadMenus();
+    openSheet(sheetName || (state.wb.sheets.find(function (s) { return !s.hidden; }) || state.wb.sheets[0]).name);
+  }
+
+  function openSheet(name, keepScroll) {
+    state.sheet = state.wb.sheets.find(function (s) { return s.name === name; });
+    Array.prototype.forEach.call($("tabs").children, function (b) { b.classList.toggle("active", b.dataset.name === name); });
+    var start = keepScroll ? state.from : Math.max(1, state.sheet.rows - PAGE + 1);
+    if (state.sheet.frozenRows && !keepScroll) start = Math.max(1, state.sheet.rows - PAGE + 1);
+    loadRows(start, keepScroll);
+  }
+
+  function loadRows(from, keepScroll) {
+    status("Loading…");
+    var url = "data?id=" + encodeURIComponent(state.wb.id) + "&sheet=" + encodeURIComponent(state.sheet.name) + "&from=" + from + "&to=" + (from + PAGE - 1);
+    var frozen = state.sheet.frozenRows || 1;
+    var head = from > 1 ? api("data?id=" + encodeURIComponent(state.wb.id) + "&sheet=" + encodeURIComponent(state.sheet.name) + "&from=1&to=" + frozen) : Promise.resolve(null);
+    Promise.all([api(url), head]).then(function (res) {
+      var j = res[0];
+      state.from = j.from; state.lastRow = j.lastRow; state.cols = Math.max(j.cols, 8);
+      state.rows = (res[1] ? res[1].rows : []).concat(j.rows);
+      render(keepScroll);
+      status(state.sheet.name + " — rows " + j.from + "–" + j.to + " of " + j.lastRow + (j.from > 1 ? "  ·  scroll to the top to load earlier rows" : ""));
+    }).catch(function (e) { status("Error: " + e.message); });
+  }
+
+  function render(keepScroll) {
+    var wrap = $("gridWrap"), top = wrap.scrollTop;
+    var thead = $("grid").tHead, tbody = $("grid").tBodies[0];
+    var h = "<tr><th class='corner'></th>";
+    for (var c = 1; c <= state.cols + 2; c++) h += "<th>" + colName(c) + "</th>";
+    thead.innerHTML = h + "</tr>";
+    var html = [], frozen = state.sheet.frozenRows || 0;
+    var seen = {};
+    state.rows.forEach(function (r) {
+      if (seen[r.n]) return; seen[r.n] = true;
+      var cls = r.n <= frozen ? " class='frozen'" : "";
+      var tr = "<tr" + cls + " data-n='" + r.n + "'><th>" + r.n + "</th>";
+      for (var c = 0; c < state.cols + 2; c++) {
+        var v = r.d[c] === undefined ? "" : r.d[c];
+        tr += "<td data-c='" + (c + 1) + "' title='" + esc(v) + "'>" + esc(v) + "</td>";
+      }
+      html.push(tr + "</tr>");
+    });
+    // one empty row after the data so new rows can be added
+    var next = Math.max(state.lastRow, 0) + 1;
+    if (!seen[next]) { var tr2 = "<tr data-n='" + next + "'><th>" + next + "</th>"; for (var k = 0; k < state.cols + 2; k++) tr2 += "<td data-c='" + (k + 1) + "'></td>"; html.push(tr2 + "</tr>"); }
+    tbody.innerHTML = html.join("");
+    if (keepScroll) wrap.scrollTop = top; else wrap.scrollTop = wrap.scrollHeight;
+    if (state.sel) select(state.sel.row, state.sel.col);
+  }
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+
+  function rowData(n) { return state.rows.find(function (r) { return r.n === n; }); }
+  function select(row, col) {
+    var prev = document.querySelector("td.sel"); if (prev) prev.classList.remove("sel");
+    state.sel = { row: row, col: col };
+    var tr = document.querySelector("tr[data-n='" + row + "']");
+    var td = tr && tr.querySelector("td[data-c='" + col + "']");
+    if (td) td.classList.add("sel");
+    $("cellRef").value = colName(col) + row;
+    var r = rowData(row);
+    $("cellInput").value = r && r.e[col - 1] !== undefined ? r.e[col - 1] : "";
+  }
+
+  $("grid").addEventListener("click", function (e) {
+    var td = e.target.closest("td"); if (!td) return;
+    select(Number(td.parentNode.dataset.n), Number(td.dataset.c));
+  });
+  $("grid").addEventListener("dblclick", function () { $("cellInput").focus(); $("cellInput").select(); });
+  $("gridWrap").addEventListener("scroll", function () {
+    if ($("gridWrap").scrollTop === 0 && state.from > 1 && !state.loading) {
+      state.loading = true;
+      var from = Math.max(1, state.from - PAGE);
+      var url = "data?id=" + encodeURIComponent(state.wb.id) + "&sheet=" + encodeURIComponent(state.sheet.name) + "&from=" + from + "&to=" + (state.from - 1);
+      api(url).then(function (j) {
+        var h = $("gridWrap").scrollHeight;
+        state.rows = j.rows.concat(state.rows.filter(function (r) { return r.n >= state.from || r.n <= (state.sheet.frozenRows || 0); }));
+        state.from = from;
+        render(true);
+        $("gridWrap").scrollTop = $("gridWrap").scrollHeight - h;
+        status(state.sheet.name + " — rows " + from + "–" + (state.lastRow) + " of " + state.lastRow);
+      }).finally(function () { state.loading = false; });
+    }
+  });
+
+  function edit(body, label) {
+    status(label + "…");
+    body.id = state.wb.id; body.sheet = state.sheet.name;
+    return api("edit", body).then(function (j) {
+      var msgs = (j.triggers || []).filter(function (t) { return t.status !== "skipped"; }).map(function (t) { return t.project + "." + t.handler + ": " + (t.error ? "error – " + t.error : "ran"); });
+      status(label + " saved." + (msgs.length ? "  Triggers: " + msgs.join("; ") : ""));
+      return refreshCounts().then(function () { openSheet(state.sheet.name, true); });
+    }).catch(function (e) { status("Error: " + e.message); alert(e.message); });
+  }
+  function refreshCounts() {
+    return api("workbooks").then(function (j) { state.workbooks = j.workbooks; state.wb = j.workbooks.find(function (w) { return w.id === state.wb.id; }); });
+  }
+
+  $("cellInput").addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && state.sel) {
+      var s = state.sel;
+      edit({ action: "set", row: s.row, col: s.col, values: [[$("cellInput").value]] }, colName(s.col) + s.row).then(function () { select(s.row + 1, s.col); });
+    }
+  });
+  document.addEventListener("keydown", function (e) {
+    if (!state.sel || document.activeElement === $("cellInput")) return;
+    var s = state.sel;
+    if (e.key === "ArrowDown") { select(s.row + 1, s.col); e.preventDefault(); }
+    else if (e.key === "ArrowUp" && s.row > 1) { select(s.row - 1, s.col); e.preventDefault(); }
+    else if (e.key === "ArrowRight") { select(s.row, s.col + 1); e.preventDefault(); }
+    else if (e.key === "ArrowLeft" && s.col > 1) { select(s.row, s.col - 1); e.preventDefault(); }
+    else if (e.key === "Enter" || e.key === "F2") { $("cellInput").focus(); e.preventDefault(); }
+    else if (e.key === "Delete" || e.key === "Backspace") { edit({ action: "clear", row: s.row, col: s.col, values: [[""]] }, "Clear " + colName(s.col) + s.row); e.preventDefault(); }
+  });
+  document.addEventListener("paste", function (e) {
+    if (!state.sel || document.activeElement === $("cellInput")) return;
+    var text = (e.clipboardData || window.clipboardData).getData("text");
+    if (!text) return;
+    e.preventDefault();
+    var lines = text.replace(/\r\n/g, "\n").replace(/\n$/, "").split("\n").map(function (l) { return l.split("\t"); });
+    var width = Math.max.apply(null, lines.map(function (l) { return l.length; }));
+    lines = lines.map(function (l) { while (l.length < width) l.push(""); return l; });
+    if (lines.length * width > 1 && !confirm("Paste " + lines.length + " row(s) × " + width + " column(s) at " + colName(state.sel.col) + state.sel.row + "?")) return;
+    edit({ action: "set", row: state.sel.row, col: state.sel.col, values: lines }, "Paste");
+  });
+  $("btnInsert").onclick = function () { if (!state.sel) return alert("Select a cell first."); var n = prompt("How many rows to insert above row " + state.sel.row + "?", "1"); if (n) edit({ action: "insertRows", row: state.sel.row, count: Number(n) }, "Insert rows"); };
+  $("btnDelete").onclick = function () { if (!state.sel) return alert("Select a cell first."); if (confirm("Delete row " + state.sel.row + "? Rows below move up (row numbers referenced by the portal will shift, as in Google Sheets).")) edit({ action: "deleteRows", row: state.sel.row, count: 1 }, "Delete row"); };
+  $("btnClear").onclick = function () { if (!state.sel) return; edit({ action: "clear", row: state.sel.row, col: state.sel.col, values: [[""]] }, "Clear"); };
+  $("btnReload").onclick = function () { refreshCounts().then(function () { openSheet(state.sheet.name, true); }); };
+  $("wbSel").onchange = function () { openWorkbook(this.value); };
+
+  /* ---------------- custom menus (onOpen) ---------------- */
+  function loadMenus() {
+    var host = $("menus"); host.innerHTML = "";
+    api("menus", { id: state.wb.id }).then(function (j) {
+      j.menus.forEach(function (m) {
+        var wrap = document.createElement("span"); wrap.className = "menu";
+        var btn = document.createElement("button"); btn.textContent = m.name + " ▾";
+        var list = document.createElement("div");
+        addItems(list, m.items, m.project);
+        btn.onclick = function (ev) { ev.stopPropagation(); var open = wrap.classList.contains("open"); closeMenus(); if (!open) wrap.classList.add("open"); };
+        wrap.appendChild(btn); wrap.appendChild(list); host.appendChild(wrap); host.appendChild(document.createTextNode(" "));
+      });
+    }).catch(function () {});
+  }
+  function addItems(list, items, project) {
+    items.forEach(function (it) {
+      if (it.separator) { list.appendChild(document.createElement("hr")); return; }
+      if (it.submenu) { var l = document.createElement("div"); l.className = "label"; l.textContent = it.submenu.name; list.appendChild(l); addItems(list, it.submenu.items, project); return; }
+      var a = document.createElement("a"); a.textContent = it.caption;
+      a.onclick = function () { closeMenus(); runMenu(project, it.fn, it.caption, []); };
+      list.appendChild(a);
+    });
+  }
+  function closeMenus() { Array.prototype.forEach.call(document.querySelectorAll(".menu.open"), function (m) { m.classList.remove("open"); }); }
+  document.addEventListener("click", closeMenus);
+
+  function runMenu(project, fn, caption, answers) {
+    status("Running " + caption + "…");
+    api("run", { id: state.wb.id, project: project, fn: fn, answers: answers }).then(function (j) {
+      if (j.needInput) return ask(j.needInput).then(function (ans) {
+        if (!ans) { status(caption + " cancelled."); return; }
+        runMenu(project, fn, caption, answers.concat([ans]));
+      });
+      var parts = [];
+      (j.alerts || []).forEach(function (a) { parts.push((a.title ? a.title + "\n" : "") + a.msg); });
+      (j.toasts || []).forEach(function (t) { parts.push(t); });
+      if (j.error) parts.unshift("Error: " + j.error);
+      showResult(caption, parts.join("\n\n") || "Done.", j.logs, j.dialogs);
+      status(caption + (j.error ? " failed." : " finished."));
+      refreshCounts().then(function () { openSheet(state.sheet.name, true); });
+    }).catch(function (e) { status("Error: " + e.message); alert(e.message); });
+  }
+  function ask(q) {
+    return new Promise(function (resolve) {
+      var d = $("dlg"), form = $("dlgForm");
+      $("dlgTitle").textContent = q.title || "";
+      $("dlgBody").innerHTML = "<p style='white-space:pre-wrap'>" + esc(q.msg) + "</p>" + (q.type === "prompt" ? "<input id='dlgText' type='text' style='width:100%'>" : "");
+      form.innerHTML = "";
+      var buttons = { OK: ["OK"], OK_CANCEL: ["OK", "CANCEL"], YES_NO: ["YES", "NO"], YES_NO_CANCEL: ["YES", "NO", "CANCEL"] }[q.buttons] || ["OK"];
+      buttons.forEach(function (b) {
+        var btn = document.createElement("button"); btn.textContent = b.charAt(0) + b.slice(1).toLowerCase(); btn.value = b;
+        if (b === "OK" || b === "YES") btn.className = "primary";
+        form.appendChild(btn); form.appendChild(document.createTextNode(" "));
+      });
+      d.onclose = function () {
+        var b = d.returnValue;
+        if (!b) return resolve(null);
+        resolve({ button: b, text: q.type === "prompt" ? ($("dlgText") || {}).value || "" : "" });
+      };
+      d.returnValue = ""; d.showModal();
+      if ($("dlgText")) $("dlgText").focus();
+    });
+  }
+  function showResult(title, text, logs, dialogs) {
+    var d = $("dlg");
+    $("dlgTitle").textContent = title;
+    var html = "<p style='white-space:pre-wrap'>" + esc(text) + "</p>";
+    (dialogs || []).forEach(function (x) { html += "<h4>" + esc(x.title) + "</h4><iframe sandbox style='width:100%;height:300px;border:1px solid #ddd' srcdoc=\"" + esc(x.html) + "\"></iframe>"; });
+    if (logs && logs.length) html += "<details><summary>Execution log (" + logs.length + ")</summary><pre>" + esc(logs.join("\n")) + "</pre></details>";
+    $("dlgBody").innerHTML = html;
+    $("dlgForm").innerHTML = "<button class='primary' value='OK'>Close</button>";
+    d.onclose = null; d.showModal();
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>
