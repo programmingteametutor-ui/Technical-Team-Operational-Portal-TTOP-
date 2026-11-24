@@ -159,6 +159,7 @@ async function runSync(dry) {
   const tName = id => (team.find(t => t.id == id) || {}).name || '';
   const C = cands.map(c => ({ ...c, pocName: tName(c.technical_poc_id) })), CL = cls.slice(), I = ivs.map(x => ({ ...x, interview_time: (x.interview_time || '').slice(0, 5) }));
   const seen = new Set(seenRows.map(x => x.key)), rows = parseDoc(text, team, CL.map(c => c.name), today);
+  const roleSet = new Set(I.map(x => rn(x.role)).filter(Boolean));   // known roles = roles already used on interviews
   const pfind = n => n && team.find(t => nm(t.name) == nm(n) || nm(t.name.split(' ')[0]) == nm(n));
   let fake = -1; const S = { lines: rows.length, added: 0, updated: 0, rescheduled: 0, already: 0, newCands: 0, newClients: 0, pending: 0, review: 0, held: 0, old: 0, failed: 0, errors: [] };
   const review = [], seenAdd = [], plans = [];
@@ -179,13 +180,12 @@ async function runSync(dry) {
     // VERIFY FIRST: a candidate who is not in the portal is NOT created automatically.
     // The line waits on Import Review ("Waiting for approval") until someone checks the name and adds it.
     if (!c) { rv(row, 'newc', { hold: '1', client: clientCanon(row.client, CL.map(x => x.name)) }); S.held++; seen.add(key); seenAdd.push({ key, action: 'held' }); continue }
-    // client
-    const cn = clientCanon(row.client, CL.map(x => x.name)); let cl = CL.find(x => x.name == cn);
-    if (!cl) {
-      if (dry) cl = { id: fake--, name: cn };
-      else { try { cl = (await rest('clients', { method: 'POST', body: { name: clean(cn) }, prefer: 'return=representation' }))[0] } catch (e) { const f = (await all('clients', 'id,name')).find(x => nm(x.name) == nm(cn) || ckey(x.name) == ckey(cn)); if (!f) { S.failed++; S.errors.push(cn + ': ' + e.message); continue } cl = f } }
-      CL.push(cl); S.newClients++;
-    }
+    // client: VERIFY FIRST, like a candidate. A client that is not in the portal is NOT created
+    // automatically; the line waits on Import Review until someone checks the name and adds it.
+    const cn = clientCanon(row.client, CL.map(x => x.name)); const cl = CL.find(x => x.name == cn);
+    if (!cl) { rv(row, 'newcl', { hold: '1', client: cn }); S.held++; S.newClients++; seen.add(key); seenAdd.push({ key, action: 'held' }); continue }
+    // role: VERIFY FIRST too. A role not used on any interview yet waits on Import Review.
+    if (rn(row.role) && !roleSet.has(rn(row.role))) { rv(row, 'newrole', { hold: '1', client: cl.name }); S.held++; seen.add(key); seenAdd.push({ key, action: 'held' }); continue }
     const noT = !row.time, mine = I.filter(x => x.candidate_id == c.id && x.client_id == cl.id && x.round == row.round);
     // already in the portal in any status (so a cancelled or deleted interview is not brought back)
     { const ex = mine.find(x => noT ? !x.interview_date : x.interview_date == row.date && x.interview_time == row.time); if (ex) { S.already++; seen.add(key); seenAdd.push({ key, action: 'already', interview_id: ex.id > 0 ? ex.id : null }); continue } }
@@ -296,3 +296,4 @@ module.exports = async (req, res) => {
 module.exports.parseDoc = parseDoc;
 // Allow up to 60 seconds (older Vercel projects stop functions after 10 seconds by default)
 module.exports.config = { maxDuration: 60 };
+module.exports.runSync = runSync;   // for tests
