@@ -104,6 +104,15 @@ async function apiRun(req, res) {
     ? await runtime.executeInWorker(PORTAL, fn, JSON.stringify(args), { serialize: true })
     : await runtime.run(PORTAL, fn, JSON.stringify(args), { transform: serializeForClient });
   if (LONG_RUNNING.has(fn) && r.ok) r.value = serializeForClient(r.value);
+  if (r.timing) {
+    const t = r.timing;
+    res.setHeader("Server-Timing", [
+      "queue;dur=" + t.queue, "refresh;dur=" + t.refresh + ';desc="' + t.refreshRows + ' rows"', "run;dur=" + t.run,
+      "save;dur=" + t.save + ';desc="' + t.saveRows + ' rows"', "after;dur=" + t.after, "attempts;desc=" + t.attempts
+    ].join(", "));
+    const total = t.queue + t.refresh + t.run + t.save + t.after;
+    if (total > 3000) log.warn("[slow] " + fn + " " + total + " ms: queue " + t.queue + ", refresh " + t.refresh + " (" + t.refreshRows + " rows), run " + t.run + ", save " + t.save + " (" + t.saveRows + " rows), after " + t.after + ", attempts " + t.attempts);
+  }
   try { await r.persisted; }
   catch (e) { return sendJson(res, 200, { ok: false, error: { name: "Error", message: "Saving to the database failed. Please try again. (" + e.message + ")" } }); }
   if (!r.ok) {

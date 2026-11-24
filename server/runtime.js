@@ -42,11 +42,12 @@ class Runtime {
 
   /** Pick up what other server copies saved; skipped when done within freshMs, unless forced. */
   async sync(force) {
-    if (!this.adapter) return;
-    if (!force && this.freshMs > 0 && Date.now() - this.syncedAt < this.freshMs) return;
+    if (!this.adapter) return null;
+    if (!force && this.freshMs > 0 && Date.now() - this.syncedAt < this.freshMs) return null;
     const started = Date.now();   // the data is current as of when the request left
-    await this.adapter.refresh(this.store);
+    const info = await this.adapter.refresh(this.store);
     this.syncedAt = started;
+    return info || {};
   }
 
   /* ------------------------------ loading ------------------------------ */
@@ -211,14 +212,27 @@ class Runtime {
   async run(project, fn, argsJson, opts) {
     opts = opts || {};
     let committed = null;
+    // where the time goes (sent to the browser as a Server-Timing header)
+    const tm = { queue: 0, refresh: 0, refreshRows: 0, run: 0, save: 0, saveRows: 0, after: 0, attempts: 0 };
+    const t0 = Date.now();
     const r = await this.exclusive(async () => {
+      tm.queue = Date.now() - t0;
       for (let attempt = 1; ; attempt++) {
-        await this.sync(attempt > 1);
+        tm.attempts = attempt;
+        let t = Date.now();
+        const info = await this.sync(attempt > 1);
+        tm.refresh += Date.now() - t; if (info) tm.refreshRows += info.rows || 0;
+        t = Date.now();
         const x = this.execute(project, fn, argsJson, Object.assign({}, opts, { keepJournal: true }));
+        tm.run += Date.now() - t;
+        x.timing = tm;
         if (x.uiRequest || !x.journal) return x;
         if (changesEmpty(x.changes)) { x.journal.clear(); return x; }
         try {
+          t = Date.now();
+          for (const e of x.changes.sheets.values()) tm.saveRows += e.full ? -1 : e.rows.size;   // -1 = whole tab rewritten
           if (this.adapter) await this.adapter.commit(this.store, x.changes, false);
+          tm.save += Date.now() - t;
           x.journal.clear();
           committed = x.changes;
           return x;
@@ -233,8 +247,10 @@ class Runtime {
       }
     });
     if (committed) {
+      const t = Date.now();
       await this.sendMails(r.mails);
       if (this.afterCommit) { try { await this.afterCommit(committed); } catch (e) { this.log.error("[afterCommit] " + e.message); } }
+      tm.after = Date.now() - t;
     }
     return r;
   }
