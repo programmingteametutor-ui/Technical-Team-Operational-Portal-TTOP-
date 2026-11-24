@@ -352,6 +352,8 @@ async function cronTick() {
     if (changed) await adapter.saveTriggers(store.triggers);
     const plan = await masters.tick();
     out.masters = plan ? { mode: masters.mode(), applied: plan.applied, errors: plan.errors.length } : null;
+    // refresh the start-up snapshot every 15 minutes when data has changed
+    if (store.lastSeq > snapState.seq && Date.now() - snapState.at > 15 * 60e3) out.snapshot = await saveSnapshot("scheduled");
   } catch (e) { out.ok = false; out.error = e.message; log.error("[cron] " + e.message); }
   finally { cronRunning = false; }
   return out;
@@ -614,6 +616,28 @@ function ready() {
   if (!readyPromise) readyPromise = init().catch((e) => { readyPromise = null; throw e; });
   return readyPromise;
 }
+/**
+ * Snapshot of Dhruva's data in Supabase Storage, so a new server copy starts from one
+ * file instead of reading every row through the database API (see persistence.js).
+ * Built inside the action lane, so it never contains a half-saved action.
+ */
+const snapState = { busy: false, seq: -1, at: 0 };
+async function saveSnapshot(reason) {
+  if (typeof adapter.buildSnapshot !== "function" || process.env.APP_SNAPSHOT === "0" || snapState.busy) return null;
+  snapState.busy = true;
+  try {
+    const t = Date.now();
+    const { body, seq } = await runtime.exclusive(async () => { await runtime.sync(true); return adapter.buildSnapshot(store); });
+    const bytes = await adapter.uploadSnapshot(body);
+    snapState.seq = seq; snapState.at = Date.now();
+    log.log("[snapshot] saved (" + reason + "): up to save " + seq + ", " + Math.round(bytes / 1024) + " KB in " + (Date.now() - t) + " ms");
+    return { seq, bytes };
+  } catch (e) {
+    log.warn("[snapshot] not saved (" + reason + "): " + e.message);
+    return null;
+  } finally { snapState.busy = false; }
+}
+
 /** How this server copy started (sent in Server-Timing so a slow first request can be explained). */
 const bootInfo = { ms: 0, steps: {}, rows: 0, tabs: 0 };
 async function init() {
@@ -631,7 +655,15 @@ async function init() {
   step("data");
   if (info) {
     bootInfo.rows = info.rows; bootInfo.tabs = info.sheets;
-    if (info.stats) bootInfo.steps["(data: " + info.stats.requests + " requests, " + Math.round(info.stats.bytes / 1048576) + " MB, " + info.stats.encoding + ", decode ms"] = info.stats.decodeMs;
+    if (info.stats) bootInfo.steps["(data from " + info.stats.from + ": " + info.stats.requests + " requests, " + Math.round(info.stats.bytes / 1024) + " KB" +
+      (info.snapshot ? ", " + info.snapshot.behind + " changes since" : "") + ", decode ms"] = info.stats.decodeMs;
+    // keep the snapshot useful: write one after a full load, or when it has fallen behind
+    if (info.snapshot) {
+      snapState.seq = Number(info.snapshot.seq); snapState.at = Number(info.snapshot.at);
+      if (info.snapshot.behind > 2000 || Date.now() - snapState.at > 6 * 3600e3) saveSnapshot("start: snapshot behind").catch(() => {});
+    } else if (info.stats) {
+      saveSnapshot("start: no snapshot yet").catch(() => {});
+    }
   }
   // Route the Apps Script web-app URLs stored in Script Properties to the matching project
   for (const e of (info && info.exportLog) || []) {

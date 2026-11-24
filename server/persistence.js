@@ -152,7 +152,119 @@ class SupabaseAdapter {
    * Full load (a new server copy starting). Reads the save counter first, so the
    * first refresh afterwards picks up anything saved while loading.
    */
+  /* ---------------- snapshot in Supabase Storage (fast start) ----------------
+   * Building 40 MB of rows through the database API takes ~10 s; one compressed
+   * file from Storage plus "everything saved since" (gs_changes) is much faster.
+   * The snapshot is labelled with the save number it is complete up to, so the
+   * refresh afterwards makes it exact. It is only an accelerator: if it is
+   * missing or unreadable, load() falls back to reading the tables. */
+  storageUrl(p) { return this.url + "/storage/v1/" + p; }
+  async ensureBucket() {
+    if (this.bucketReady) return;
+    const res = await fetch(this.storageUrl("bucket"), { method: "POST", headers: this.headers(), body: JSON.stringify({ id: SNAP_BUCKET, name: SNAP_BUCKET, public: false }) });
+    const text = await res.text();
+    if (!res.ok && !/already exists|Duplicate|409/i.test(text + res.status)) throw new Error("create bucket " + res.status + ": " + text.slice(0, 200));
+    this.bucketReady = true;
+  }
+  /** Build the snapshot body (synchronous: call it where no action is half-done). */
+  buildSnapshot(store) {
+    const sheets = [];
+    for (const wb of store.workbooks.values()) {
+      wb.sheets.forEach((sd, position) => {
+        if (!sd.pk) return;
+        const rows = [];
+        sd.rows.forEach((r, i) => { const enc = encodeRow(r); if (enc) rows.push([i + 1, enc, sd.seqs.get(i) || 0]); });
+        sheets.push({ pk: sd.pk, spreadsheet_id: wb.id, sheet_id: sd.sheetId, name: sd.name, position, max_rows: sd.maxRows, max_cols: sd.maxCols,
+          frozen_rows: sd.frozenRows, frozen_cols: sd.frozenCols, hidden: sd.hidden, meta: sd.meta, sver: sd.sver, rows });
+      });
+    }
+    const props = [];
+    for (const [project, m] of store.props) for (const [key, value] of m) props.push([project, key, value, seqMap(store, project).get(key) || 0]);
+    const workbooks = [...store.workbooks.values()].map(wb => ({ spreadsheet_id: wb.id, key: wb.key, title: wb.title, time_zone: wb.timeZone }));
+    return { body: JSON.stringify({ v: 1, seq: store.lastSeq, at: Date.now(), workbooks, sheets, props }), seq: store.lastSeq };
+  }
+  async uploadSnapshot(body) {
+    await this.ensureBucket();
+    const gz = await new Promise((ok, fail) => require("zlib").gzip(body, (e, b) => (e ? fail(e) : ok(b))));
+    const res = await fetch(this.storageUrl("object/" + SNAP_BUCKET + "/" + SNAP_FILE), {
+      method: "POST", headers: { apikey: this.key, Authorization: "Bearer " + this.key, "Content-Type": "application/gzip", "x-upsert": "true" }, body: gz
+    });
+    if (!res.ok) throw new Error("upload snapshot " + res.status + ": " + (await res.text()).slice(0, 200));
+    return gz.length;
+  }
+  async downloadSnapshot() {
+    const res = await fetch(this.storageUrl("object/" + SNAP_BUCKET + "/" + SNAP_FILE), { headers: { apikey: this.key, Authorization: "Bearer " + this.key } });
+    if (res.status === 404 || res.status === 400) { await res.arrayBuffer().catch(() => {}); return null; }   // none yet
+    if (!res.ok) throw new Error("download snapshot " + res.status);
+    const gz = Buffer.from(await res.arrayBuffer());
+    const snap = JSON.parse(require("zlib").gunzipSync(gz).toString("utf8"));
+    if (!snap || snap.v !== 1 || !Array.isArray(snap.sheets)) throw new Error("snapshot has an unknown format");
+    snap.bytes = gz.length;
+    return snap;
+  }
+  /** Fill the store from a snapshot, then catch up with everything saved after it. */
+  async loadFromSnapshot(store, snap) {
+    for (const w of snap.workbooks) store.addWorkbook(new WorkbookData({ id: w.spreadsheet_id, key: w.key, title: w.title, timeZone: w.time_zone }));
+    let n = 0;
+    const t = Date.now();
+    for (const s of snap.sheets.slice().sort((a, b) => a.position - b.position)) {
+      const wb = store.workbook(s.spreadsheet_id);
+      if (!wb) continue;
+      const sd = new SheetData({ pk: s.pk, sheetId: s.sheet_id, name: s.name, maxRows: s.max_rows, maxCols: s.max_cols, frozenRows: s.frozen_rows, frozenCols: s.frozen_cols, hidden: s.hidden, meta: s.meta, sver: s.sver });
+      sd.workbook = wb;
+      wb.sheets.push(sd);
+      for (const [rowNum, enc, seq] of s.rows) { sd.rows[rowNum - 1] = decodeRow(enc); sd.seqs.set(rowNum - 1, Number(seq)); n++; }
+    }
+    for (const [project, key, value, seq] of snap.props) {
+      if (value !== null) store.properties(project).set(key, value);
+      seqMap(store, project).set(key, Number(seq));
+    }
+    if (this.stats) this.stats.decodeMs += Date.now() - t;
+    store.lastSeq = Number(snap.seq) || 0;
+    const caught = await this.refresh(store);   // everything saved after the snapshot (also new / removed / replaced tabs)
+    return { rows: n, behind: caught.rows + caught.props };
+  }
+
   async load(store, config) {
+    this.stats = { requests: 0, bytes: 0, encoding: "", decodeMs: 0, from: "tables" };
+    // settings cache, triggers and export log are small: always live, alongside the data
+    const side = Promise.all([
+      this.selectAll("gs_cache", "select=project,key,value,expires_at&expires_at=gt." + encodeURIComponent(new Date().toISOString())),
+      this.selectAll("gs_triggers", "select=*"),
+      this.selectAll("gs_export_log", "select=project,web_app_url,script_id,spreadsheet_id").catch(() => [])   // optional table
+    ]);
+    side.catch(() => {});   // awaited below
+    let info = null;
+    if (process.env.APP_SNAPSHOT !== "0") {
+      try {
+        const snap = await this.downloadSnapshot();
+        if (snap) {
+          const r = await this.loadFromSnapshot(store, snap);
+          info = { rows: r.rows, sheets: snap.sheets.length, workbooks: snap.workbooks.length, snapshot: { seq: snap.seq, at: snap.at, behind: r.behind, bytes: snap.bytes } };
+          this.stats.from = "snapshot";
+          this.stats.bytes += snap.bytes;
+        }
+      } catch (e) {
+        console.warn("[boot] snapshot not used (" + e.message + "); loading from the tables");
+        store.workbooks.clear(); store.props.clear(); store.propSeqs.clear(); store.lastSeq = 0;
+        info = null;
+      }
+    }
+    if (!info) info = await this.loadTables(store);
+    const [cacheRows, triggerRows, exportLog] = await side;
+    const { CACHES } = require("./gas/services");
+    for (const c of cacheRows) {
+      let m = CACHES.get(c.project); if (!m) { m = new Map(); CACHES.set(c.project, m); }
+      m.set(c.key, { v: c.value, exp: new Date(c.expires_at).getTime() });
+    }
+    store.triggers = triggerRows.map(triggerFromRow);
+    this.store = store;
+    const stats = this.stats; this.stats = null;
+    return Object.assign(info, { exportLog, stats });
+  }
+
+  /** Full load from the tables (no snapshot yet, or it could not be read). */
+  async loadTables(store) {
     const startSeq = Number(((await this.req("GET", "gs_counter?select=v&id=eq.1"))[0] || {}).v || 0);
     const wbs = await this.selectAll("gs_workbooks", "select=*&order=spreadsheet_id");
     const sheets = await this.selectAll("gs_sheets", "select=*&order=spreadsheet_id,position");
@@ -173,7 +285,6 @@ class SupabaseAdapter {
     let n = 0;
     const SLICE = 1000;
     const COLS = "select=row_num,v,f,d,x,seq";
-    this.stats = { requests: 0, bytes: 0, encoding: "", decodeMs: 0 };
     const take = (sd, page) => {
       const t = Date.now();
       for (const r of page) { sd.rows[r.row_num - 1] = decodeRow(r); sd.seqs.set(r.row_num - 1, Number(r.seq)); }
@@ -193,30 +304,16 @@ class SupabaseAdapter {
     });
     // biggest tabs first, so their extra slices are queued early
     for (const sd of list.slice().sort((a, b) => b.maxRows - a.maxRows)) tasks.push(first(sd));
-    // settings, cache, triggers and export log load alongside the rows
-    const side = Promise.all([
-      this.selectAll("gs_script_properties", "select=project,key,value,seq"),
-      this.selectAll("gs_cache", "select=project,key,value,expires_at&expires_at=gt." + encodeURIComponent(new Date().toISOString())),
-      this.selectAll("gs_triggers", "select=*"),
-      this.selectAll("gs_export_log", "select=project,web_app_url,script_id,spreadsheet_id").catch(() => [])   // optional table
-    ]);
-    side.catch(() => {});   // awaited below; avoid an unhandled rejection while rows load
-    await runPool(tasks, Number(process.env.SUPABASE_LOAD_PARALLEL || 16));
-    const [props, cacheRows, triggerRows, exportLog] = await side;
-    for (const p of props) {
+    const props = this.selectAll("gs_script_properties", "select=project,key,value,seq");
+    props.catch(() => {});   // awaited below
+    // the database is the limit here (more parallel requests were slower), so keep it moderate
+    await runPool(tasks, Number(process.env.SUPABASE_LOAD_PARALLEL || 8));
+    for (const p of await props) {
       if (p.value !== null) store.properties(p.project).set(p.key, p.value);
       seqMap(store, p.project).set(p.key, Number(p.seq));
     }
-    const { CACHES } = require("./gas/services");
-    for (const c of cacheRows) {
-      let m = CACHES.get(c.project); if (!m) { m = new Map(); CACHES.set(c.project, m); }
-      m.set(c.key, { v: c.value, exp: new Date(c.expires_at).getTime() });
-    }
-    store.triggers = triggerRows.map(triggerFromRow);
     store.lastSeq = startSeq;
-    this.store = store;
-    const stats = this.stats; this.stats = null;
-    return { rows: n, sheets: sheets.length, workbooks: wbs.length, exportLog, stats };
+    return { rows: n, sheets: sheets.length, workbooks: wbs.length };
   }
   async loadTriggers(store) {
     store.triggers = (await this.selectAll("gs_triggers", "select=*")).map(triggerFromRow);
@@ -326,6 +423,8 @@ class SupabaseAdapter {
   }
 }
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+const SNAP_BUCKET = process.env.APP_SNAPSHOT_BUCKET || "app-snapshots";
+const SNAP_FILE = "dhruva-store.json.gz";
 /** Run queued tasks with at most `max` at once; tasks may queue more tasks while running. */
 function runPool(tasks, max) {
   return new Promise((resolve, reject) => {
