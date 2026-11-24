@@ -108,7 +108,11 @@ async function apiRun(req, res) {
     const t = r.timing;
     res.setHeader("Server-Timing", [
       "queue;dur=" + t.queue, "refresh;dur=" + t.refresh + ';desc="' + t.refreshRows + ' rows"', "run;dur=" + t.run,
-      "save;dur=" + t.save + ';desc="' + t.saveRows + ' rows"', "after;dur=" + t.after, "attempts;desc=" + t.attempts
+      "save;dur=" + t.save + ';desc="' + t.saveRows + ' rows"', "after;dur=" + t.after, "attempts;desc=" + t.attempts,
+      // startup of this server copy; bootwait > 0 means this request waited for it
+      "bootwait;dur=" + (req.bootWait || 0),
+      "boot;dur=" + bootInfo.ms + ';desc="' + bootInfo.rows + " rows, " + bootInfo.tabs + " tabs, " +
+        Object.entries(bootInfo.steps).map(([k, v]) => k + " " + v).join(" / ") + '"'
     ].join(", "));
     const total = t.queue + t.refresh + t.run + t.save + t.after;
     if (total > 3000) log.warn("[slow] " + fn + " " + total + " ms: queue " + t.queue + ", refresh " + t.refresh + " (" + t.refreshRows + " rows), run " + t.run + ", save " + t.save + " (" + t.saveRows + " rows), after " + t.after + ", attempts " + t.attempts);
@@ -610,15 +614,22 @@ function ready() {
   if (!readyPromise) readyPromise = init().catch((e) => { readyPromise = null; throw e; });
   return readyPromise;
 }
+/** How this server copy started (sent in Server-Timing so a slow first request can be explained). */
+const bootInfo = { ms: 0, steps: {}, rows: 0, tabs: 0 };
 async function init() {
   const t0 = Date.now();
+  let ts = t0;
+  const step = (name) => { const now = Date.now(); bootInfo.steps[name] = now - ts; ts = now; };
   if (!process.env.SUPABASE_URL) throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required");
   auth = createAuth({
     supabaseUrl: process.env.SUPABASE_URL.replace(/\/$/, ""), serviceKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
     anonKey: process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY, secret: process.env.APP_SECRET, rest, log
   });
   runtime.loadProjects();
+  step("scripts");
   const info = await adapter.load(store, CONFIG);
+  step("data");
+  if (info) { bootInfo.rows = info.rows; bootInfo.tabs = info.sheets; }
   // Route the Apps Script web-app URLs stored in Script Properties to the matching project
   for (const e of (info && info.exportLog) || []) {
     const mm = /\/macros\/s\/([A-Za-z0-9_-]+)\//.exec(e.web_app_url || "");
@@ -626,12 +637,18 @@ async function init() {
   }
   for (const [id, w] of Object.entries(CONFIG.workbooks)) if (!store.workbook(id)) log.warn("[boot] workbook " + w.title + " (" + id + ") has no data yet - run the Dhruva export first");
   portalAllowList = computeAllowList();
+  step("allowlist");
   log.log("[boot] loaded " + store.workbooks.size + " Dhruva workbooks" + (info ? " (" + info.sheets + " tabs, " + info.rows + " rows)" : "") + " in " + (Date.now() - t0) + " ms; Dhruva portal exposes " + portalAllowList.size + " functions");
   await ensureSuperAdmins().catch(e => log.error("[boot] SUPER_ADMIN_EMAILS: " + e.message));
+  step("superadmins");
   await seedDhruvaUsers().catch(e => log.error("[boot] could not add Dhruva users to app_users: " + e.message));
+  step("users");
   masters = createMasters({ runtime, store, rest, log });
   admin = createAdmin({ runtime, store, rest, log });
   runtime.afterCommit = (changes) => masters.onDhruvaChanges(changes);
+  step("rest");
+  bootInfo.ms = Date.now() - t0;
+  log.log("[boot] ready in " + bootInfo.ms + " ms: " + JSON.stringify(bootInfo.steps));
 }
 /** Local / VM mode (`npm start`): listen and run the once-a-minute work in-process. */
 async function main() {
@@ -644,7 +661,11 @@ if (require.main === module) main().catch(e => { log.error(e); process.exit(1); 
 
 /** Vercel entry: api/index.js calls this for every request. */
 async function vercelHandler(req, res) {
-  try { await ready(); }
+  const t = Date.now();
+  try {
+    await ready();
+    req.bootWait = Date.now() - t;
+  }
   catch (e) { log.error("[boot] " + (e && e.stack || e)); return sendJson(res, 500, { ok: false, error: "Server failed to start: " + e.message }); }
   return handle(req, res);
 }
