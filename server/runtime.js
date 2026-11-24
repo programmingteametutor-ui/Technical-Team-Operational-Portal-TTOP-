@@ -34,6 +34,19 @@ class Runtime {
     this.projects = new Map();
     this.debugLogs = /^(1|true|yes)$/i.test(process.env.DEBUG_GAS_LOGS || "");
     this.lane = Promise.resolve();   // one action at a time in this server copy
+    // A page fires several calls at once; within this window only the first one
+    // asks Supabase for other copies' changes (saves stay conflict-checked: see run()).
+    this.freshMs = Number(process.env.GAS_REFRESH_WINDOW_MS ?? 1500);
+    this.syncedAt = 0;
+  }
+
+  /** Pick up what other server copies saved; skipped when done within freshMs, unless forced. */
+  async sync(force) {
+    if (!this.adapter) return;
+    if (!force && this.freshMs > 0 && Date.now() - this.syncedAt < this.freshMs) return;
+    const started = Date.now();   // the data is current as of when the request left
+    await this.adapter.refresh(this.store);
+    this.syncedAt = started;
   }
 
   /* ------------------------------ loading ------------------------------ */
@@ -188,10 +201,11 @@ class Runtime {
 
   /**
    * The normal way to run an action:
-   *   1. pick up what other server copies saved
+   *   1. pick up what other server copies saved (skipped if this copy did so in the
+   *      last freshMs; a save is still refused if another copy changed the same rows)
    *   2. run the Apps Script function (synchronously, as in Google)
    *   3. save its changes atomically; if another copy changed the same rows in the
-   *      meantime, undo, refresh and run the action again (up to 5 times)
+   *      meantime, undo, refresh (always) and run the action again (up to 5 times)
    * Like Apps Script, changes made before an error are still saved.
    */
   async run(project, fn, argsJson, opts) {
@@ -199,7 +213,7 @@ class Runtime {
     let committed = null;
     const r = await this.exclusive(async () => {
       for (let attempt = 1; ; attempt++) {
-        if (this.adapter) await this.adapter.refresh(this.store);
+        await this.sync(attempt > 1);
         const x = this.execute(project, fn, argsJson, Object.assign({}, opts, { keepJournal: true }));
         if (x.uiRequest || !x.journal) return x;
         if (changesEmpty(x.changes)) { x.journal.clear(); return x; }
@@ -244,7 +258,7 @@ class Runtime {
     opts = opts || {};
     if (!this.pool) this.pool = new WorkerPool(this, Number(process.env.GAS_WORKERS || 2));
     const job = await this.exclusive(async () => {
-      if (this.adapter) await this.adapter.refresh(this.store);
+      await this.sync(true);
       return {
         type: "run", project, fn, argsJson, serialize: !!opts.serialize, activeUserEmail: opts.activeUserEmail || "",
         snapshot: require("./snapshot").storeToSnapshot(this.store),
@@ -255,7 +269,7 @@ class Runtime {
     let saveError = null;
     if (msg.changes) {
       await this.exclusive(async () => {
-        if (this.adapter) await this.adapter.refresh(this.store);
+        await this.sync(true);
         const { applyTransfer } = require("./snapshot");
         const { journal } = this.store.begin();
         let changes;
