@@ -439,11 +439,13 @@ const sso = createDhruvaSso({ runtime, store });
 const SECURE_COOKIE = /^https:/i.test(PUBLIC_URL);
 
 function redirect(res, to) { res.writeHead(302, { Location: to, "Cache-Control": "no-store" }); res.end(); }
+/** Web address of each portal (the portal id "dhruva" stays internal: roles, database). */
+const PORTAL_PATH = { ttop: "/ttop/", dhruva: "/call-pilots/" };
 /** Page gate: signed in + allowed to open this portal, else back to the home page. */
 async function pageGate(req, res, portal) {
   const u = await auth.current(req);
   if (u && auth.canOpen(u, portal)) return u;
-  redirect(res, "/?next=" + encodeURIComponent("/" + portal + "/"));
+  redirect(res, "/?next=" + encodeURIComponent(PORTAL_PATH[portal]));
   return null;
 }
 /** API gate for Dhruva calls (google.script.run, sheet editor). */
@@ -506,7 +508,7 @@ async function appApi(req, res, sub) {
   if (!me) return sendJson(res, 401, { ok: false, error: "Signed out" });
   if (sub === "me") return sendJson(res, 200, { ok: true, user: publicUser(me) });
   if (sub === "dhruva-session") {
-    if (!auth.canOpen(me, "dhruva")) return sendJson(res, 403, { ok: false, error: "You do not have access to the Dhruva portal" });
+    if (!auth.canOpen(me, "dhruva")) return sendJson(res, 403, { ok: false, error: "You do not have access to the Call Pilots portal" });
     const cur = req.method === "POST" ? String((await readJson(req)).current || "") : String(new URL(req.url, "http://x").searchParams.get("current") || "");
     const r = await sso.session(me, cur);
     return r.error ? sendJson(res, 403, { ok: false, error: r.error }) : sendJson(res, 200, { ok: true, token: r.token });
@@ -633,9 +635,13 @@ async function handle(req, res) {
     }
     let m = /^\/app\/api\/([\w-]+)$/.exec(p);
     if (m) return await appApi(req, res, m[1]);
-    // Dhruva portal
-    if ((p === "/dhruva" || p === "/dhruva/") && req.method === "GET") { if (await pageGate(req, res, "dhruva")) return await servePortal(req, res); return; }
-    if ((p === "/" || p === "/exec" || p === "/dhruva/") && req.method === "POST") return await serveExec(PORTAL, req, res);  // Dhruva doPost (Coverage Desk export)
+    // Call Pilots portal (formerly Dhruva): served at /call-pilots/; old /dhruva/ links redirect there
+    if ((p === "/call-pilots" || p === "/call-pilots/") && req.method === "GET") { if (await pageGate(req, res, "dhruva")) return await servePortal(req, res); return; }
+    if ((p === "/dhruva" || p.startsWith("/dhruva/")) && (req.method === "GET" || req.method === "HEAD")) {
+      const q = req.url.includes("?") ? "?" + req.url.split("?").slice(1).join("?") : "";
+      res.writeHead(301, { Location: "/call-pilots/" + q }); return res.end();
+    }
+    if ((p === "/" || p === "/exec" || p === "/call-pilots/" || p === "/dhruva/") && req.method === "POST") return await serveExec(PORTAL, req, res);  // portal doPost (Coverage Desk export); old /dhruva/ still accepted
     if (p === "/api/run" && req.method === "POST") { if (await dhruvaApiGate(req, res)) return await apiRun(req, res); return; }
     m = /^\/exec\/([\w-]+)$/.exec(p);
     if (m && runtime.projects.has(m[1])) return await serveExec(m[1], req, res);
@@ -734,7 +740,7 @@ async function main() {
   await ready();
   const iv = setInterval(() => cronTick().catch(() => {}), 60000); iv.unref();
   setTimeout(() => cronTick().catch(() => {}), 5000).unref();
-  server.listen(PORT, () => log.log("[boot] Interview Operations Portal running at " + PUBLIC_URL + "  (home /, TTOP /ttop/, Dhruva /dhruva/)"));
+  server.listen(PORT, () => log.log("[boot] Interview Operations Portal running at " + PUBLIC_URL + "  (home /, TTOP /ttop/, Call Pilots /call-pilots/)"));
 }
 if (require.main === module) main().catch(e => { log.error(e); process.exit(1); });
 

@@ -1,4 +1,12 @@
-# Interview Operations Portal (TTOP + Dhruva)
+# Interview Operations Portal (TTOP + Call Pilots)
+
+> **Call Pilots Operations Portal** is the new name of the Dhruva Portal: the
+> portal where the Pradeep Anna Team and HYD team drive interview calls (schedules,
+> candidates, selections and incentives). It is served at `/call-pilots/`; old
+> `/dhruva/` links redirect there (301, query and `#…` kept), and POSTs to
+> `/dhruva/` are still accepted. The code, folder (`portals/dhruva/`), the
+> internal portal id `dhruva` (roles, `app_users.portals`) and database tables
+> (`gs_*`) keep the old name.
 
 One app that hosts both portals, with one Google sign-in, one Supabase
 database and one set of roles.
@@ -15,7 +23,7 @@ database and one set of roles.
 ```
  /            home: Google sign-in; super admin dashboard, People, Data import, Dhruva setup, Shared candidates & clients
  /ttop/       TTOP Portal              (+ /api/config, /api/sync-doc, /api/interview-inbox…, /api/push-alerts, /sw.js, /manifest.json, /icons/…)
- /dhruva/     Dhruva Portal            (+ /api/run, /sheets, /exec/<project>)
+ /call-pilots/ Call Pilots Portal      (+ /api/run, /sheets, /exec/<project>; /dhruva/ redirects here)
 ```
 
 ## Super admin dashboard
@@ -48,7 +56,7 @@ straight to their portal.
 | **User** | The portal(s) ticked for them | TTOP user (sees their own candidates), or Dhruva up to HANDLER-level roles. |
 
 How it is enforced:
-- **Entry:** the server checks the role before serving `/ttop/` or `/dhruva/`
+- **Entry:** the server checks the role before serving `/ttop/` or `/call-pilots/`
   and on every Dhruva call. Someone without access is sent back to the home page.
 - **TTOP:** the People list writes TTOP's own approval/admin flags
   (`profiles.approved / role / removed`, `admin_emails`) through database

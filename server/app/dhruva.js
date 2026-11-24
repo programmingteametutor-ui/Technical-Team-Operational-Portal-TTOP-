@@ -45,14 +45,14 @@ function createDhruvaSso({ runtime, store }) {
   function ceilingProblem(appUser, info) {
     const blocked = (CEILING[appUser.role] || []).filter(r => info.roles.includes(r));
     if (!blocked.length) return null;
-    return "Your Dhruva account has the " + blocked.join(" / ") + " role, which is above your app role (" + appUser.role.replace("_", " ") +
-      "). Ask a super admin to change your role in Dhruva Administration or on the app's Access page.";
+    return "Your Call Pilots account has the " + blocked.join(" / ") + " role, which is above your app role (" + appUser.role.replace("_", " ") +
+      "). Ask a super admin to change your role in Call Pilots Administration or on the app's Access page.";
   }
 
-  /** Returns { token } or { error }. Keeps the browser's current Dhruva token when it is still valid for this person. */
+  /** Returns { token } or { error }. Keeps the browser's current Call Pilots token when it is still valid for this person. */
   async function session(appUser, currentToken) {
     const info = dhruvaRoles(appUser.email);
-    if (!info.known || !info.active) return { error: "Your email is not set up as an active user in the Dhruva portal yet. Ask a super admin to add you in Dhruva Administration." };
+    if (!info.known || !info.active) return { error: "Your email is not set up as an active user in the Call Pilots portal yet. Ask a super admin to add you in Call Pilots Administration." };
     const problem = ceilingProblem(appUser, info);
     if (problem) return { error: problem };
     const r = await runtime.run("portal", null, null, {
@@ -68,10 +68,10 @@ function createDhruvaSso({ runtime, store }) {
           c.ctx, { timeout: 30000 });
       }
     });
-    try { await r.persisted; } catch (e) { return { error: "Could not save the Dhruva session: " + e.message }; }
-    if (!r.ok) return { error: "Dhruva sign-in failed: " + (r.error && r.error.message) };
+    try { await r.persisted; } catch (e) { return { error: "Could not save the Call Pilots session: " + e.message }; }
+    if (!r.ok) return { error: "Call Pilots sign-in failed: " + (r.error && r.error.message) };
     const out = JSON.parse(r.value);
-    if (out.error === "NOT_AUTHORIZED_IN_DHRUVA") return { error: "Dhruva does not allow this email to sign in. Ask a super admin to check it in Dhruva Administration." };
+    if (out.error === "NOT_AUTHORIZED_IN_DHRUVA") return { error: "Call Pilots does not allow this email to sign in. Ask a super admin to check it in Call Pilots Administration." };
     return out;
   }
 

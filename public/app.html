@@ -110,7 +110,7 @@
   function guard(fn) { var g = GEN; return function (x) { if (g === GEN) return fn(x); }; }
   var PORTALS = {
     ttop: { name: "TTOP Portal", desc: "Technical Team Operational Portal: candidates, interviews, assessments, closers and incentives.", url: "/ttop/" },
-    dhruva: { name: "Dhruva Portal", desc: "Interview Operations Portal: call schedule, approvals, recovery, reports and incentives.", url: "/dhruva/" }
+    dhruva: { name: "Call Pilots Operations Portal", desc: "Driving interview calls for the Pradeep Anna Team and the Hyderabad team: call schedule, approvals, recovery, reports and incentives.", url: "/call-pilots/" }
   };
   var ROLE_LABEL = { super_admin: "Super admin", admin: "Admin", user: "User" };
   var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); };
@@ -121,7 +121,7 @@
   }
 
   function showLogin(msg) {
-    $root.innerHTML = '<div class="center"><div class="login"><h1>Interview Operations Portal</h1><p>TTOP and Dhruva portals in one place.</p>' +
+    $root.innerHTML = '<div class="center"><div class="login"><h1>Interview Operations Portal</h1><p>TTOP and Call Pilots portals in one place.</p>' +
       (msg ? '<p class="err">' + esc(msg) + '</p>' : '') +
       '<button class="primary gbtn" id="g">Sign in with Google</button></div></div>';
     document.getElementById("g").onclick = function () {
@@ -134,10 +134,12 @@
     if (withSignOut) document.getElementById("so").onclick = signOut;
   }
 
-  // Where the person wanted to go: ?next=/dhruva/ (sent by the server) or a TTOP alert link (/#i123)
+  // Where the person wanted to go: ?next=/call-pilots/ (sent by the server) or a TTOP alert link (/#i123).
+  // An old ?next=/dhruva/ link is sent to /call-pilots/.
   function nextTarget() {
     var q = new URLSearchParams(location.search).get("next");
-    if (q && /^\/(ttop|dhruva)\//.test(q)) return q;
+    if (q && /^\/dhruva\//.test(q)) q = "/call-pilots/" + q.slice(8);
+    if (q && /^\/(ttop|call-pilots)\//.test(q)) return q;
     var h = location.hash;
     if (h && h.length > 1 && !/access_token|error=/.test(h)) return "/ttop/" + h;
     return "";
@@ -157,7 +159,7 @@
         var next = nextTarget();
         try { next = next || sessionStorage.getItem("iop_next") || ""; sessionStorage.removeItem("iop_next"); } catch (e) {}
         var allowed = j.user.portals;
-        if (next) { var p = next.split("/")[1]; if (allowed.indexOf(p) >= 0) return openPortal(p, next); }
+        if (next) { var p = next.split("/")[1]; if (p === "call-pilots") p = "dhruva"; if (allowed.indexOf(p) >= 0) return openPortal(p, next); }
         if (allowed.length === 1 && j.user.role === "user") return openPortal(allowed[0]);
         render();
       }).catch(function (e) {
@@ -188,7 +190,7 @@
   function render() {
     var canManage = ME.role === "super_admin" || ME.role === "admin";
     var tabs = ME.role === "super_admin"
-      ? [["dash", "Dashboard"], ["people", "People"], ["data", "Data import"], ["setup", "Dhruva setup"], ["masters", "Shared candidates &amp; clients"]]
+      ? [["dash", "Dashboard"], ["people", "People"], ["data", "Data import"], ["setup", "Call Pilots setup"], ["masters", "Shared candidates &amp; clients"]]
       : canManage ? [["home", "Portals"], ["people", "People"]] : [];
     GEN++;
     if (!tabs.some(function (t) { return t[0] === TAB; })) TAB = tabs.length ? tabs[0][0] : "home";
@@ -259,23 +261,23 @@
       var pune = D.pune, hyd = D.hyd;
       var dhruvaEmpty = D.data.every(function (w) { return !w.rows; });
       var alerts = [];
-      if (dhruvaEmpty) alerts.push('Dhruva has no sheet data yet. <a href="#" data-go="data">Import the CSV files</a>.');
-      else { var empties = D.data.reduce(function (a, w) { return a + w.empty; }, 0); if (empties) alerts.push(empties + ' Dhruva tab' + (empties === 1 ? " is" : "s are") + ' empty. <a href="#" data-go="data">See Data import</a>.'); }
-      if (setup && !setup.ready) alerts.push('Dhruva setup is incomplete (bridges or edit triggers). <a href="#" data-go="setup">Finish setup</a>.');
+      if (dhruvaEmpty) alerts.push('Call Pilots has no sheet data yet. <a href="#" data-go="data">Import the CSV files</a>.');
+      else { var empties = D.data.reduce(function (a, w) { return a + w.empty; }, 0); if (empties) alerts.push(empties + ' Call Pilots tab' + (empties === 1 ? " is" : "s are") + ' empty. <a href="#" data-go="data">See Data import</a>.'); }
+      if (setup && !setup.ready) alerts.push('Call Pilots setup is incomplete (bridges or edit triggers). <a href="#" data-go="setup">Finish setup</a>.');
       if (U.pending) alerts.push(U.pending + ' person' + (U.pending === 1 ? " is" : "s are") + ' waiting for access. <a href="#" data-go="people">Review</a>.');
       if (j.ttopError) alerts.push('TTOP figures unavailable: ' + esc(j.ttopError) + ' (run migration 6).');
       if (T.last_sync && !T.last_sync.ok) alerts.push('Last TTOP doc sync failed ' + when(T.last_sync.ran_at) + ': ' + esc(T.last_sync.error || T.last_sync.message || "") + '.');
 
       var dPending = sum(pune.pending) + sum(hyd.pending);
-      var h = '<div class="quick"><button class="primary" data-p="ttop">Open TTOP</button><button class="primary" data-p="dhruva">Open Dhruva</button>' +
-        '<button data-p="dhruva" data-url="/sheets">Dhruva sheet editor</button><span class="sp"></span><span class="muted">' + esc(new Date(j.generatedAt).toLocaleString(undefined, { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })) + '</span><button id="refresh">Refresh</button></div>';
+      var h = '<div class="quick"><button class="primary" data-p="ttop">Open TTOP</button><button class="primary" data-p="dhruva">Open Call Pilots</button>' +
+        '<button data-p="dhruva" data-url="/sheets">Call Pilots sheet editor</button><span class="sp"></span><span class="muted">' + esc(new Date(j.generatedAt).toLocaleString(undefined, { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })) + '</span><button id="refresh">Refresh</button></div>';
       if (alerts.length) h += '<div class="alerts">' + alerts.map(function (a) { return '<div>' + a + '</div>'; }).join("") + '</div>';
 
       h += '<div class="kpis">' +
         kpi(nf(C.today), "TTOP interviews today", nf(C.today_done) + " completed") +
-        kpi(nf(pune.calls.recorded + hyd.calls.recorded), "Dhruva calls updated today", "Pradeep " + pune.calls.recorded + " · HYD " + hyd.calls.recorded) +
-        kpi(nf(dPending + (C.import_review || 0)), "Waiting for review", "Dhruva requests " + dPending + " · TTOP import " + nf(C.import_review || 0), dPending + (C.import_review || 0) ? "warn" : "") +
-        kpi(rs((C.incentive_month_amt || 0) + pune.incentives.monthAmount + hyd.incentives.monthAmount), "Incentives this month", "TTOP " + rs(C.incentive_month_amt) + " · Dhruva " + rs(pune.incentives.monthAmount + hyd.incentives.monthAmount)) +
+        kpi(nf(pune.calls.recorded + hyd.calls.recorded), "Call Pilots calls updated today", "Pradeep " + pune.calls.recorded + " · HYD " + hyd.calls.recorded) +
+        kpi(nf(dPending + (C.import_review || 0)), "Waiting for review", "Call Pilots requests " + dPending + " · TTOP import " + nf(C.import_review || 0), dPending + (C.import_review || 0) ? "warn" : "") +
+        kpi(rs((C.incentive_month_amt || 0) + pune.incentives.monthAmount + hyd.incentives.monthAmount), "Incentives this month", "TTOP " + rs(C.incentive_month_amt) + " · Call Pilots " + rs(pune.incentives.monthAmount + hyd.incentives.monthAmount)) +
         kpi(nf(C.placed_month), "Placed this month", nf(C.closers_month || 0) + " closers · " + nf(C.expected_open || 0) + " expected") +
         kpi(nf(U.total), "People with access", nf(U.activeWeek) + " signed in this week") + '</div>';
 
@@ -289,30 +291,30 @@
 
       var callRows = function (team, c) { return c.today.map(function (x) { return '<tr><td>' + team + '</td><td>' + esc(x.text.split(" – ").slice(0, 2).join(" – ")) + '</td><td>' + esc(x.handler) + '</td><td><span class="st st-' + esc(x.status.toLowerCase()) + '">' + esc(x.status) + '</span></td></tr>'; }).join(""); };
       var allCalls = callRows("Pradeep", pune.calls) + callRows("HYD", hyd.calls);
-      h += '<div class="card"><div class="ch"><b>Dhruva — calls updated today</b><span class="muted">' + ["Completed", "Rescheduled", "Cancelled"].map(function (s) { return s + " " + ((pune.calls.byStatus[s] || 0) + (hyd.calls.byStatus[s] || 0)); }).join(" · ") + '</span></div>' +
+      h += '<div class="card"><div class="ch"><b>Call Pilots — calls updated today</b><span class="muted">' + ["Completed", "Rescheduled", "Cancelled"].map(function (s) { return s + " " + ((pune.calls.byStatus[s] || 0) + (hyd.calls.byStatus[s] || 0)); }).join(" · ") + '</span></div>' +
         (allCalls ? '<div class="scroll"><table class="compact"><thead><tr><th>Team</th><th>Call</th><th>Handler</th><th>Status</th></tr></thead><tbody>' + allCalls + '</tbody></table></div>' : '<p class="muted">No call outcomes recorded today yet.</p>') +
-        '<div class="ch" style="margin-top:14px"><b>Waiting for review in Dhruva</b></div><table class="compact"><thead><tr><th></th><th class="num">Pradeep</th><th class="num">HYD</th></tr></thead><tbody>' +
+        '<div class="ch" style="margin-top:14px"><b>Waiting for review in Call Pilots</b></div><table class="compact"><thead><tr><th></th><th class="num">Pradeep</th><th class="num">HYD</th></tr></thead><tbody>' +
         Object.keys(Object.assign({}, pune.pending, hyd.pending)).map(function (k) { return '<tr><td>' + esc(k) + '</td><td class="num">' + nf(pune.pending[k]) + '</td><td class="num">' + nf(hyd.pending[k]) + '</td></tr>'; }).join("") +
         '<tr><td>Recovery exceptions</td><td class="num">' + nf(pune.recoveryExceptions) + '</td><td class="num">' + nf(hyd.recoveryExceptions) + '</td></tr></tbody></table></div></div>';
 
       // Incentives
       h += '<div class="grid3"><div class="card"><div class="ch"><b>TTOP incentives</b></div><div class="mini">' +
         '<div><b>' + rs(C.incentive_month_amt) + '</b>this month</div><div><b>' + rs(C.incentive_pending_amt) + '</b>pending (' + nf(C.incentive_pending) + ')</div><div><b>' + nf(C.candidates) + '</b>active candidates</div><div><b>' + nf(C.clients) + '</b>clients</div></div></div>' +
-        '<div class="card"><div class="ch"><b>Dhruva Pradeep Anna Team — this month</b><span class="muted">' + rs(pune.incentives.monthAmount) + ' · ' + nf(pune.incentives.monthCount) + ' entries</span></div>' + handlerTable(pune.incentives.byHandler) + '</div>' +
-        '<div class="card"><div class="ch"><b>Dhruva HYD — this month</b><span class="muted">' + rs(hyd.incentives.monthAmount) + ' · ' + nf(hyd.incentives.monthCount) + ' entries</span></div>' + handlerTable(hyd.incentives.byHandler) + '</div></div>';
+        '<div class="card"><div class="ch"><b>Call Pilots Pradeep Anna Team — this month</b><span class="muted">' + rs(pune.incentives.monthAmount) + ' · ' + nf(pune.incentives.monthCount) + ' entries</span></div>' + handlerTable(pune.incentives.byHandler) + '</div>' +
+        '<div class="card"><div class="ch"><b>Call Pilots HYD — this month</b><span class="muted">' + rs(hyd.incentives.monthAmount) + ' · ' + nf(hyd.incentives.monthCount) + ' entries</span></div>' + handlerTable(hyd.incentives.byHandler) + '</div></div>';
 
       // Activity
       var act = (T.activity || []).map(function (a) { return { at: a.at, src: "TTOP", who: a.who, what: a.action + (a.entity ? " · " + a.entity : "") }; })
-        .concat(D.activity.map(function (a) { return { at: a.at, src: "Dhruva " + a.team, who: a.who, what: a.action + (a.detail ? " · " + a.detail : "") }; }))
+        .concat(D.activity.map(function (a) { return { at: a.at, src: "Call Pilots " + a.team, who: a.who, what: a.action + (a.detail ? " · " + a.detail : "") }; }))
         .sort(function (a, b) { return new Date(b.at) - new Date(a.at); }).slice(0, 15);
       h += '<div class="grid2"><div class="card"><div class="ch"><b>Recent activity</b><span class="muted">both portals</span></div>' + (act.length ? '<table class="compact"><tbody>' + act.map(function (a) {
         return '<tr><td class="muted nowrap">' + when(a.at) + '</td><td><span class="pill">' + esc(a.src) + '</span></td><td>' + esc(a.what).slice(0, 160) + '<div class="muted">' + esc(a.who || "") + '</div></td></tr>';
       }).join("") + '</tbody></table>' : '<p class="muted">No activity yet.</p>') + '</div>';
       h += '<div class="card"><div class="ch"><b>System</b></div><table class="compact"><tbody>' +
         '<tr><td>People</td><td>' + nf(U.superAdmins) + ' super admins · ' + nf(U.admins) + ' admins · ' + nf(U.users) + ' users</td></tr>' +
-        '<tr><td>Shared masters (Dhruva)</td><td>' + nf(D.masters.candidates) + ' candidates · ' + nf(D.masters.clients) + ' clients</td></tr>' +
+        '<tr><td>Shared masters (Call Pilots)</td><td>' + nf(D.masters.candidates) + ' candidates · ' + nf(D.masters.clients) + ' clients</td></tr>' +
         '<tr><td>TTOP doc sync</td><td>' + (T.last_sync ? (T.last_sync.ok ? "OK " : '<span class="err">Failed</span> ') + when(T.last_sync.ran_at) + ' · ' + nf(T.last_sync.added) + ' added, ' + nf(T.last_sync.updated) + ' updated' : '<span class="muted">no runs yet</span>') + '</td></tr>' +
-        '<tr><td>Dhruva setup</td><td>' + (setup ? (setup.ready ? "Ready" : '<a href="#" data-go="setup">Incomplete</a>') : "—") + '</td></tr>' +
+        '<tr><td>Call Pilots setup</td><td>' + (setup ? (setup.ready ? "Ready" : '<a href="#" data-go="setup">Incomplete</a>') : "—") + '</td></tr>' +
         D.data.map(function (w) { return '<tr><td>' + esc(w.title) + '</td><td>' + nf(w.rows) + ' rows in ' + w.tabs.length + ' tabs' + (w.empty ? ' · <span class="err">' + w.empty + ' empty</span>' : '') + '</td></tr>'; }).join("") +
         '</tbody></table></div></div>';
 
@@ -332,11 +334,11 @@
         var q = Q.toLowerCase();
         var list = j.users.filter(function (u) { return !q || (u.email + " " + (u.name || "") + " " + u.role + " " + u.portals.join(" ")).toLowerCase().indexOf(q) >= 0; });
         document.getElementById("ulist").innerHTML = list.map(function (u) {
-          var warn = u.dhruva && u.dhruva.problem ? '<div class="pill warn" title="' + esc(u.dhruva.problem) + '">Dhruva role mismatch</div>' : '';
-          var dh = u.dhruva && u.dhruva.known ? esc(u.dhruva.roles.join(", ") || "—") + (u.dhruva.active ? "" : " (inactive)") : '<span class="muted">not in Dhruva</span>';
+          var warn = u.dhruva && u.dhruva.problem ? '<div class="pill warn" title="' + esc(u.dhruva.problem) + '">Call Pilots role mismatch</div>' : '';
+          var dh = u.dhruva && u.dhruva.known ? esc(u.dhruva.roles.join(", ") || "—") + (u.dhruva.active ? "" : " (inactive)") : '<span class="muted">not in Call Pilots</span>';
           return '<tr><td><b>' + esc(u.name || "") + '</b><div class="muted">' + esc(u.email) + '</div></td>' +
             '<td><span class="pill ' + u.role + '">' + ROLE_LABEL[u.role] + '</span>' + (u.active ? "" : ' <span class="pill warn">blocked</span>') + '</td>' +
-            '<td>' + (u.portals.length ? u.portals.map(function (p) { return '<span class="pill">' + (p === "ttop" ? "TTOP" : "Dhruva") + '</span>'; }).join("") : '<span class="muted">none</span>') + '</td>' +
+            '<td>' + (u.portals.length ? u.portals.map(function (p) { return '<span class="pill">' + (p === "ttop" ? "TTOP" : "Call Pilots") + '</span>'; }).join("") : '<span class="muted">none</span>') + '</td>' +
             '<td>' + dh + warn + '</td><td class="muted nowrap">' + when(u.lastLogin) + '</td>' +
             '<td>' + (u.canEdit ? '<button data-e="' + esc(u.email) + '">Edit</button>' : '') + '</td></tr>';
         }).join("") || '<tr><td colspan="6" class="muted">No match.</td></tr>';
@@ -351,11 +353,11 @@
       }).join("") + '</tbody></table></div>';
       h += '<div class="card"><div class="row" style="justify-content:space-between"><div><b>People and access</b><div class="muted">' +
         (ME.role === "super_admin" ? "Super admins open both portals. Admins and users open the portals ticked for them." : "You can add and change users of your portal.") +
-        ' TTOP access follows this list automatically. Roles inside Dhruva are set in Dhruva Administration; the role here is the ceiling.</div></div>' +
+        ' TTOP access follows this list automatically. Roles inside Call Pilots are set in Call Pilots Administration; the role here is the ceiling.</div></div>' +
         '<button class="primary" id="add">Add person</button></div>' +
         '<div class="row" style="margin-top:12px"><input type="text" id="q" placeholder="Search name, email, role, portal" style="flex:1;min-width:220px"><span class="muted">' +
         roles.super_admin + ' super admins · ' + roles.admin + ' admins · ' + roles.user + ' users' + (blocked ? ' · ' + blocked + ' blocked' : '') + '</span></div>' +
-        '<div class="scroll tall"><table style="margin-top:8px"><thead><tr><th>Person</th><th>Role</th><th>Portals</th><th>Dhruva role</th><th>Last sign-in</th><th></th></tr></thead><tbody id="ulist"></tbody></table></div></div>';
+        '<div class="scroll tall"><table style="margin-top:8px"><thead><tr><th>Person</th><th>Role</th><th>Portals</th><th>Call Pilots role</th><th>Last sign-in</th><th></th></tr></thead><tbody id="ulist"></tbody></table></div></div>';
       tabEl().innerHTML = h;
       draw();
       document.getElementById("q").oninput = function () { Q = this.value; draw(); };
@@ -380,7 +382,7 @@
       '<label>Email</label><input type="email" id="f_email" value="' + esc(u.email) + '"' + (isNew && !prefill ? "" : " disabled") + '>' +
       '<label>Name</label><input type="text" id="f_name" value="' + esc(u.name || "") + '">' +
       '<label>Role</label><select id="f_role">' + roles.map(function (r) { return '<option value="' + r + '"' + (r === u.role ? " selected" : "") + '>' + ROLE_LABEL[r] + '</option>'; }).join("") + '</select>' +
-      '<label>Portals</label><div id="f_portals">' + portals.map(function (p) { return '<label style="display:inline-flex;gap:6px;font-weight:400;margin-right:14px"><input type="checkbox" value="' + p + '"' + (u.portals.indexOf(p) >= 0 ? " checked" : "") + '>' + (p === "ttop" ? "TTOP" : "Dhruva") + '</label>'; }).join("") + '</div>' +
+      '<label>Portals</label><div id="f_portals">' + portals.map(function (p) { return '<label style="display:inline-flex;gap:6px;font-weight:400;margin-right:14px"><input type="checkbox" value="' + p + '"' + (u.portals.indexOf(p) >= 0 ? " checked" : "") + '>' + (p === "ttop" ? "TTOP" : "Call Pilots") + '</label>'; }).join("") + '</div>' +
       '<label style="display:flex;gap:6px;font-weight:400;margin-top:12px"><input type="checkbox" id="f_active"' + (u.active ? " checked" : "") + '> Active (untick to block)</label>' +
       '<p class="muted" style="font-size:12px">Super admins always get both portals. Admins manage their portal; users see only their own work.</p><p class="err" id="f_err"></p>' +
       '<div class="row" style="justify-content:space-between;margin-top:8px">' + (isNew ? "<span></span>" : '<button class="danger" id="f_del">Remove</button>') +
@@ -459,13 +461,13 @@
           return '<tr><td>' + esc(t.name) + '</td><td class="num">' + (t.rows ? nf(t.rows) : t.expectEmpty ? '<span class="muted">empty in Google too</span>' : '<span class="err">empty</span>') + '</td><td class="muted">' + (t.imported ? "imported " + when(t.imported) + " by " + esc(t.by || "") : "") + '</td></tr>';
         }).join("") + '</tbody></table></details>';
       }).join("");
-      tabEl().innerHTML = '<div class="card"><b>Import Dhruva sheet data from CSV</b><ol class="muted steps">' +
-        '<li>Open each Dhruva Google Sheet and pick a tab.</li><li><b>File → Download → Comma-separated values (.csv)</b>. Google names the file “<i>Spreadsheet - Tab</i>.csv”, which is how it is matched here.</li>' +
+      tabEl().innerHTML = '<div class="card"><b>Import Call Pilots sheet data from CSV</b><ol class="muted steps">' +
+        '<li>Open each Call Pilots Google Sheet and pick a tab.</li><li><b>File → Download → Comma-separated values (.csv)</b>. Google names the file “<i>Spreadsheet - Tab</i>.csv”, which is how it is matched here.</li>' +
         '<li>Drop all the files below (as many as you like), check where each goes, then Import.</li></ol>' +
         '<p class="muted">Each file replaces that tab completely. Dates, amounts and TRUE/FALSE are turned back into real values using the layout of each tab, so the portal logic works as in Google. Formulas come in as their values. Timestamps shown as a date only in Google arrive without the time of day.</p>' +
         '<label class="drop" id="drop"><input type="file" id="pick" accept=".csv,text/csv" multiple hidden>Drop CSV files here or <u>choose files</u></label>' +
         '<div id="files"></div><div class="row" style="margin-top:12px"><button class="primary" id="go" disabled>Import</button><button id="clr">Clear list</button><span class="muted" id="prog"></span></div></div>' +
-        '<div class="card"><div class="ch"><b>What is in Dhruva now</b></div>' + dataTable + '</div>';
+        '<div class="card"><div class="ch"><b>What is in Call Pilots now</b></div>' + dataTable + '</div>';
       drawFiles();
       var drop = document.getElementById("drop");
       document.getElementById("pick").onchange = function () { addFiles(this.files); this.value = ""; };
@@ -516,12 +518,12 @@
     return send();
   }
 
-  /* ---------------- Dhruva setup ---------------- */
+  /* ---------------- Call Pilots setup ---------------- */
   function renderSetup() {
     loading();
     api("dhruva-setup").then(guard(function (j) {
-      var h = '<div class="card"><div class="ch"><b>Dhruva setup</b>' + (j.ready ? '<span class="ok">✓ Ready</span>' : '<span class="err">Needs setup</span>') + '</div>' +
-        '<p class="muted">The Dhruva projects talk to each other through settings (Script Properties) and an edit trigger that Google kept for them. When the data comes from CSV files these are not there yet. <b>Apply recommended setup</b> fills in only what is missing — it never changes a value that is already set.</p>' +
+      var h = '<div class="card"><div class="ch"><b>Call Pilots setup</b>' + (j.ready ? '<span class="ok">✓ Ready</span>' : '<span class="err">Needs setup</span>') + '</div>' +
+        '<p class="muted">The Call Pilots projects talk to each other through settings (Script Properties) and an edit trigger that Google kept for them. When the data comes from CSV files these are not there yet. <b>Apply recommended setup</b> fills in only what is missing — it never changes a value that is already set.</p>' +
         '<table class="compact"><thead><tr><th>Project</th><th>Setting</th><th>Status</th></tr></thead><tbody>' +
         j.checks.map(function (c) { return '<tr><td>' + esc(c.project) + '</td><td><code>' + esc(c.key) + '</code>' + (c.note ? '<div class="muted">' + esc(c.note) + '</div>' : '') + '</td><td>' + (c.ok ? '<span class="ok">✓ set</span>' : '<span class="err">missing</span>') + '</td></tr>'; }).join("") +
         j.triggers.map(function (t) { return '<tr><td>' + esc(t.project) + '</td><td>Edit trigger <code>' + esc(t.handler) + '</code></td><td>' + (t.ok ? '<span class="ok">✓ installed</span>' : '<span class="err">missing</span>') + '</td></tr>'; }).join("") +
@@ -557,9 +559,9 @@
       var rep = j.report, part = function (k, label) {
         var p = rep && rep[k];
         if (!p) return '';
-        return '<h3>' + label + '</h3><div class="stat"><div><b>' + p.dhruvaRows + '</b>in Dhruva</div><div><b>' + p.ttopRows + '</b>in TTOP</div><div><b>' + p.linked + '</b>already paired</div>' +
-          '<div><b>' + p.toLink + '</b>to pair</div><div><b>' + p.addToTtop + '</b>to add to TTOP</div><div><b>' + p.addToDhruva + '</b>to add to Dhruva</div>' +
-          '<div><b>' + p.renameInTtop + '</b>renames in TTOP</div><div><b>' + p.renameInDhruva + '</b>renames in Dhruva</div></div>' +
+        return '<h3>' + label + '</h3><div class="stat"><div><b>' + p.dhruvaRows + '</b>in Call Pilots</div><div><b>' + p.ttopRows + '</b>in TTOP</div><div><b>' + p.linked + '</b>already paired</div>' +
+          '<div><b>' + p.toLink + '</b>to pair</div><div><b>' + p.addToTtop + '</b>to add to TTOP</div><div><b>' + p.addToDhruva + '</b>to add to Call Pilots</div>' +
+          '<div><b>' + p.renameInTtop + '</b>renames in TTOP</div><div><b>' + p.renameInDhruva + '</b>renames in Call Pilots</div></div>' +
           '<details><summary class="muted">Examples</summary><pre>' + esc(JSON.stringify(p.examples, null, 1)) + '</pre></details>' +
           (p.conflicts.length ? '<pre>' + esc(p.conflicts.join("\n")) + '</pre>' : '');
       };

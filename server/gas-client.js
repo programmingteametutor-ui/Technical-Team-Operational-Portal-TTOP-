@@ -13,7 +13,7 @@
    * scripts run, make sure that token belongs to the person signed in to the app
    * (one synchronous request, so the portal boots already signed in). */
   var TOKEN_KEY = "interview_portal_session";
-  var HOME = "/?next=" + encodeURIComponent("/dhruva/");
+  var HOME = "/?next=" + encodeURIComponent("/call-pilots/");
   function ssoSync() {
     var cur = "";
     try { cur = localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY) || ""; } catch (e) {}
@@ -27,12 +27,12 @@
         return true;
       }
       if (x.status === 401) { location.replace(HOME); return false; }
-      alert(j.error || "You cannot open the Dhruva portal.");
+      alert(j.error || "You cannot open the Call Pilots portal.");
       location.replace("/");
       return false;
     } catch (e) { return true; }
   }
-  var IS_DHRUVA_PAGE = /^\/dhruva\/?$/.test(location.pathname);
+  var IS_DHRUVA_PAGE = /^\/call-pilots\/?$/.test(location.pathname);
   if (IS_DHRUVA_PAGE) ssoSync();
 
   function serializeArg(a) {

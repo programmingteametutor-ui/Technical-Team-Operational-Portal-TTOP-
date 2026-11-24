@@ -2,7 +2,7 @@
   "name": "interview-operations-portal",
   "version": "2.2.0",
   "private": true,
-  "description": "One app for the TTOP and Dhruva portals on Vercel + Supabase: one Google sign-in, one database, roles across both. Both portals run unchanged.",
+  "description": "One app for the TTOP and Call Pilots (formerly Dhruva) portals on Vercel + Supabase: one Google sign-in, one database, roles across both. Both portals run unchanged.",
   "main": "server/index.js",
   "engines": {
     "node": "22.x"
