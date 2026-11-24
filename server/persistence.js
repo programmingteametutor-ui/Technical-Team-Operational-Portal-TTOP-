@@ -127,6 +127,10 @@ class SupabaseAdapter {
         throw e;
       }
       const text = await res.text();
+      if (this.stats) {
+        this.stats.requests++; this.stats.bytes += text.length;
+        this.stats.encoding = res.headers.get("content-encoding") || "none";
+      }
       if (!res.ok) {
         if (res.status >= 500 && attempt < 4) { await sleep(500 * attempt); continue; }
         throw new Error("Supabase " + method + " " + p.split("?")[0] + " -> " + res.status + ": " + text.slice(0, 500));
@@ -169,8 +173,11 @@ class SupabaseAdapter {
     let n = 0;
     const SLICE = 1000;
     const COLS = "select=row_num,v,f,d,x,seq";
+    this.stats = { requests: 0, bytes: 0, encoding: "", decodeMs: 0 };
     const take = (sd, page) => {
+      const t = Date.now();
       for (const r of page) { sd.rows[r.row_num - 1] = decodeRow(r); sd.seqs.set(r.row_num - 1, Number(r.seq)); }
+      this.stats.decodeMs += Date.now() - t;
       n += page.length;
     };
     const tasks = [];   // functions returning a promise
@@ -208,7 +215,8 @@ class SupabaseAdapter {
     store.triggers = triggerRows.map(triggerFromRow);
     store.lastSeq = startSeq;
     this.store = store;
-    return { rows: n, sheets: sheets.length, workbooks: wbs.length, exportLog };
+    const stats = this.stats; this.stats = null;
+    return { rows: n, sheets: sheets.length, workbooks: wbs.length, exportLog, stats };
   }
   async loadTriggers(store) {
     store.triggers = (await this.selectAll("gs_triggers", "select=*")).map(triggerFromRow);

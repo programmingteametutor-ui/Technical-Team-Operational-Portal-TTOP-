@@ -629,7 +629,10 @@ async function init() {
   step("scripts");
   const info = await adapter.load(store, CONFIG);
   step("data");
-  if (info) { bootInfo.rows = info.rows; bootInfo.tabs = info.sheets; }
+  if (info) {
+    bootInfo.rows = info.rows; bootInfo.tabs = info.sheets;
+    if (info.stats) bootInfo.steps["(data: " + info.stats.requests + " requests, " + Math.round(info.stats.bytes / 1048576) + " MB, " + info.stats.encoding + ", decode ms"] = info.stats.decodeMs;
+  }
   // Route the Apps Script web-app URLs stored in Script Properties to the matching project
   for (const e of (info && info.exportLog) || []) {
     const mm = /\/macros\/s\/([A-Za-z0-9_-]+)\//.exec(e.web_app_url || "");
