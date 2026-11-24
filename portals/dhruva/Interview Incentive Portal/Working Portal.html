@@ -17157,6 +17157,7 @@ const PORTAL_LIVE_SYNC_ENABLED = false;
             '<th>Time</th>' +
             '<th>Candidate</th>' +
             '<th>Client</th>' +
+            '<th>Role</th>' +
             '<th>Duration</th>' +
             '<th>Round</th>' +
             (isAdmin ? '<th>Handler</th>' : '') +
@@ -17191,6 +17192,9 @@ const PORTAL_LIVE_SYNC_ENABLED = false;
             '</td>' +
             '<td>' +
               callIdentityCellHtml(call,"client") +
+            '</td>' +
+            '<td>' +
+              callRoleCellHtml(call) +
             '</td>' +
             '<td>' +
               escapeHtml(call.duration || "—") +
@@ -17288,6 +17292,176 @@ const PORTAL_LIVE_SYNC_ENABLED = false;
 
     }
 
+
+    /* ---------- Role of a call (PortalCallRole.gs) ----------
+       The handler of the call (or an admin) confirms the Role the
+       call is for, next to Map Candidate / Map Client. */
+    function callRoleCellHtml(call){
+      const parsed = String(call.role || "").trim();
+      const confirmed = String(call.confirmedRole || "").trim();
+      let html =
+        '<strong>' + escapeHtml(confirmed || parsed || "—") + '</strong>';
+      if(confirmed){
+        html +=
+          '<div style="margin-top:4px;font-size:8px;color:#1a7f37;font-weight:800;">' +
+            '✓ Confirmed' +
+            (call.roleConfirmedBy ? ' • ' + escapeHtml(call.roleConfirmedBy) : '') +
+          '</div>';
+      }else{
+        html +=
+          '<div style="margin-top:4px;font-size:8px;color:#9a6700;font-weight:800;">' +
+            (parsed ? 'From call text • not confirmed' : 'No role in call text') +
+          '</div>';
+      }
+      if(call.handler){
+        html +=
+          '<div style="margin-top:6px;">' +
+            '<button class="action-btn request" type="button" ' +
+              'onclick="openCallRoleModal(\'' + jsString(call.callId) + '\')">' +
+              (confirmed ? 'Change Role' : 'Confirm Role') +
+            '</button>' +
+          '</div>';
+      }
+      return html;
+    }
+
+    let callRoleModalCallId = "";
+
+    function openCallRoleModal(callId){
+      const data = currentCallScheduleData || {};
+      const call = (data.calls || []).find(function(c){ return c.callId === callId; });
+      if(!call){
+        showToast("This call is no longer in the list. Refresh Call Schedule.","error");
+        return;
+      }
+      callRoleModalCallId = callId;
+      const current = String(call.confirmedRole || call.role || "").trim();
+      const options = (data.roleOptions || []).concat(
+        (data.calls || []).map(function(c){ return c.confirmedRole || c.role || ""; })
+      );
+      const seen = {};
+      const list = options.filter(function(r){
+        const k = String(r || "").trim().toLowerCase();
+        if(!k || seen[k]){ return false; }
+        seen[k] = true;
+        return true;
+      }).sort();
+
+      let modal = document.getElementById("callRoleModal");
+      if(!modal){
+        modal = document.createElement("div");
+        modal.id = "callRoleModal";
+        modal.className = "confirm-modal";
+        document.body.appendChild(modal);
+      }
+      modal.innerHTML =
+        '<div class="confirm-card" style="width:min(560px,96vw);">' +
+          '<div class="confirm-title">' + (call.confirmedRole ? 'Change Role' : 'Confirm Role') + '</div>' +
+          '<div class="confirm-message">' +
+            'Candidate: <b>' + escapeHtml(call.candidate || "—") + '</b>' +
+            ' • Client: <b>' + escapeHtml(call.client || "—") + '</b>' +
+            '<div style="margin-top:6px;font-size:11px;color:#5b6478;">Call text: ' + escapeHtml(call.originalText || "") + '</div>' +
+            (call.role
+              ? '<div style="margin-top:4px;font-size:11px;color:#5b6478;">Role read from the call text: <b>' + escapeHtml(call.role) + '</b></div>'
+              : '') +
+          '</div>' +
+          '<div style="margin-top:14px;">' +
+            '<div style="font-size:11px;font-weight:800;color:#37435d;margin-bottom:6px;">Role / Position for this call</div>' +
+            '<input id="callRoleInput" class="filter-input" type="text" list="callRoleOptions" style="width:100%;" maxlength="120" ' +
+              'placeholder="e.g. Java Developer" value="' + escapeHtml(current) + '">' +
+            '<datalist id="callRoleOptions">' +
+              list.map(function(r){ return '<option value="' + escapeHtml(r) + '">'; }).join("") +
+            '</datalist>' +
+          '</div>' +
+          '<div class="confirm-actions">' +
+            '<button class="confirm-cancel" type="button" onclick="closeCallRoleModal()">Cancel</button>' +
+            '<button class="confirm-proceed" type="button" id="callRoleSaveButton" onclick="saveCallRoleFromModal()">Save Role</button>' +
+          '</div>' +
+        '</div>';
+      modal.classList.add("show");
+      const input = document.getElementById("callRoleInput");
+      if(input){
+        input.focus();
+        input.select();
+        input.onkeydown = function(e){ if(e.key === "Enter"){ saveCallRoleFromModal(); } };
+      }
+    }
+
+    function closeCallRoleModal(){
+      callRoleModalCallId = "";
+      const modal = document.getElementById("callRoleModal");
+      if(modal){ modal.classList.remove("show"); }
+    }
+
+    function saveCallRoleFromModal(){
+      const token = getPortalToken();
+      if(!token){
+        logout();
+        return;
+      }
+      const callId = callRoleModalCallId;
+      const data = currentCallScheduleData || {};
+      const call = (data.calls || []).find(function(c){ return c.callId === callId; });
+      const input = document.getElementById("callRoleInput");
+      const role = String(input && input.value || "").replace(/\s+/g," ").trim();
+      if(!call){
+        closeCallRoleModal();
+        return;
+      }
+      if(!role){
+        showToast("Enter the role for this call.","error");
+        return;
+      }
+      const busyKey = "callRole:" + callId;
+      if(!beginPortalBusy(busyKey,"Saving role...")){
+        return;
+      }
+      const button = document.getElementById("callRoleSaveButton");
+      if(button){ button.disabled = true; }
+      google.script.run
+        .withSuccessHandler(function(result){
+          endPortalBusy(busyKey);
+          if(button){ button.disabled = false; }
+          if(!result || !result.ok){
+            showToast("Role was not saved. Please try again.","error");
+            return;
+          }
+          call.confirmedRole = result.confirmedRole;
+          call.roleConfirmedBy = result.roleConfirmedBy || "";
+          call.roleConfirmedAt = result.roleConfirmedAt || "";
+          if(data.roleOptions && data.roleOptions.indexOf(result.confirmedRole) < 0){
+            data.roleOptions.push(result.confirmedRole);
+          }
+          closeCallRoleModal();
+          applyCallScheduleFilters();
+          showToast("Role saved: " + result.confirmedRole,"success");
+        })
+        .withFailureHandler(function(error){
+          endPortalBusy(busyKey);
+          if(button){ button.disabled = false; }
+          const message = safeError(error,"Unable to save the role.");
+          if(message === "SESSION_EXPIRED"){
+            logout();
+            return;
+          }
+          showToast(
+            message === "CALL_ACCESS_DENIED"
+              ? "Only the handler of this call or an admin can confirm its role."
+              : message,
+            "error"
+          );
+        })
+        .savePortalCallRole(
+          token,
+          callId,
+          role,
+          {
+            dateKey: String(call.dateKey || ""),
+            sourceRow: Number(call.sourceRow || 0),
+            originalText: String(call.originalText || "")
+          }
+        );
+    }
 
     function callIdentityCellHtml(call,entityType){
 

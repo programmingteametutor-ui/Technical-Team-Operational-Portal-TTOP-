@@ -189,6 +189,17 @@ function getPortalCallScheduleData(token, requestedDateKey){
       );
   }
 
+  // Confirmed Role per call (PortalCallRole.gs)
+  if(
+    typeof PCR_enrichCalls_ ===
+    "function"
+  ){
+    allCalls =
+      PCR_enrichCalls_(
+        allCalls
+      );
+  }
+
   let visibleCalls = allCalls;
 
   if(!PC_isAdminUser_(user)){
@@ -213,6 +224,12 @@ function getPortalCallScheduleData(token, requestedDateKey){
     workingDate: schedule.dateLabel,
     workingDateKey: schedule.dateKey,
     availableDates: availableDates,
+
+    // suggestions for Confirm Role (PortalCallRole.gs)
+    roleOptions:
+      typeof PCR_roleOptions_ === "function"
+        ? PCR_roleOptions_()
+        : [],
 
     autoSelectedMostRecentHandlerDate:
       Boolean(
