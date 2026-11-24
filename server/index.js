@@ -454,6 +454,41 @@ async function dhruvaApiGate(req, res) {
   return null;
 }
 
+/** CPU profile of one Dhruva call: self and total time per function (see /app/api/profile). */
+async function profileCall(fn, args, top) {
+  const inspector = require("inspector");
+  const session = new inspector.Session();
+  session.connect();
+  const post = (m, p) => new Promise((ok, fail) => session.post(m, p || {}, (e, r) => (e ? fail(e) : ok(r))));
+  await post("Profiler.enable");
+  await post("Profiler.setSamplingInterval", { interval: 200 });
+  await runtime.sync(true);   // so the profile covers only the call itself
+  await post("Profiler.start");
+  const t = Date.now();
+  const r = await runtime.run(PORTAL, fn, JSON.stringify(args), { transform: serializeForClient });
+  const wall = Date.now() - t;
+  const { profile } = await post("Profiler.stop");
+  session.disconnect();
+  // self time per node, then per function; total time = self + all descendants
+  const byId = new Map(profile.nodes.map(n => [n.id, n]));
+  const dt = new Map();
+  profile.samples.forEach((id, i) => dt.set(id, (dt.get(id) || 0) + (profile.timeDeltas[i] || 0)));
+  const key = (n) => { const c = n.callFrame; return (c.functionName || "(anonymous)") + "  " + (c.url ? c.url.split(/[\\/]/).slice(-2).join("/") : "") + (c.url ? ":" + (c.lineNumber + 1) : ""); };
+  const self = new Map(), total = new Map();
+  const walk = (n, stack) => {
+    const k = key(n);
+    const s = dt.get(n.id) || 0;
+    self.set(k, (self.get(k) || 0) + s);
+    let sub = s;
+    for (const c of n.children || []) sub += walk(byId.get(c), stack.concat(k));
+    if (!stack.includes(k)) total.set(k, (total.get(k) || 0) + sub);   // count recursion once
+    return sub;
+  };
+  walk(profile.nodes[0], []);
+  const ms = (m) => [...m].map(([k, us]) => [Math.round(us / 100) / 10, k]).filter(([v]) => v >= 1).sort((a, b) => b[0] - a[0]).slice(0, top);
+  return { ok: r.ok, error: r.ok ? undefined : errorMessage(r.error), wallMs: wall, timing: r.timing, self: ms(self), total: ms(total) };
+}
+
 async function appApi(req, res, sub) {
   if (sub === "login" && req.method === "POST") {
     const body = await readJson(req);
@@ -475,6 +510,15 @@ async function appApi(req, res, sub) {
     const cur = req.method === "POST" ? String((await readJson(req)).current || "") : String(new URL(req.url, "http://x").searchParams.get("current") || "");
     const r = await sso.session(me, cur);
     return r.error ? sendJson(res, 403, { ok: false, error: r.error }) : sendJson(res, 200, { ok: true, token: r.token });
+  }
+  if (sub === "profile" && req.method === "POST") {
+    // Diagnostic (super admins): run one Dhruva call under the CPU profiler and return where
+    // its time went, as function names and milliseconds only (no data).
+    if (me.role !== "super_admin") return sendJson(res, 403, { ok: false, error: "Super admins only" });
+    const body = await readJson(req);
+    const fn = String(body.fn || "");
+    if (!portalAllowList.has(fn)) return sendJson(res, 400, { ok: false, error: "Unknown portal function" });
+    return sendJson(res, 200, await profileCall(fn, Array.isArray(body.args) ? body.args : [], Number(body.top) || 40));
   }
   if (sub === "users") {
     if (me.role === "user") return sendJson(res, 403, { ok: false, error: "Not allowed" });
@@ -705,4 +749,4 @@ async function vercelHandler(req, res) {
   return handle(req, res);
 }
 
-module.exports = { server, store, runtime, main, ready, handle, vercelHandler, cronTick, serializeForClient, buildPage, get auth() { return auth; }, get masters() { return masters; } };
+module.exports = { server, store, runtime, main, ready, handle, vercelHandler, cronTick, profileCall, serializeForClient, buildPage, get auth() { return auth; }, get masters() { return masters; } };
