@@ -273,7 +273,7 @@ class SupabaseAdapter {
       sheets.push(item);
     }
     const props = changes.props.map(p => ({ project: p.project, key: p.key, value: p.value, expect_seq: seqMap(store, p.project).has(p.key) ? seqMap(store, p.project).get(p.key) : null }));
-    const payload = { force: !!force, sheets, deleted: changes.deleted.filter(sd => sd.pk).map(sd => sd.pk), props, cache: changes.cache || [] };
+    const payload = { force: !!force, sheets, deleted: changes.deleted.filter(sd => sd.pk).map(sd => sd.pk), props, cache: lastPerKey(changes.cache || [], c => c.project + "\u0000" + c.key) };
     let out;
     try { out = await this.req("POST", "rpc/gs_commit", { p: payload }); }
     catch (e) {
@@ -300,6 +300,12 @@ class SupabaseAdapter {
   }
 }
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+/** Keep the last entry per key (one save may touch the same cache key twice). */
+function lastPerKey(list, keyFn) {
+  const m = new Map();
+  for (const x of list) { const k = keyFn(x); m.delete(k); m.set(k, x); }
+  return [...m.values()];
+}
 function seqMap(store, project) { let m = store.propSeqs.get(project); if (!m) { m = new Map(); store.propSeqs.set(project, m); } return m; }
 
 module.exports = { FileAdapter, SupabaseAdapter, encodeRow, decodeRow, encodeCell, decodeCell };

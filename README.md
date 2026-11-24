@@ -13,31 +13,52 @@ database and one set of roles.
   paid twice).
 
 ```
- /            home: Google sign-in, portal tiles, Access, Shared candidates & clients
+ /            home: Google sign-in; super admin dashboard, People, Data import, Dhruva setup, Shared candidates & clients
  /ttop/       TTOP Portal              (+ /api/config, /api/sync-doc, /api/interview-inbox…, /api/push-alerts, /sw.js, /manifest.json, /icons/…)
  /dhruva/     Dhruva Portal            (+ /api/run, /sheets, /exec/<project>)
 ```
+
+## Super admin dashboard
+
+Super admins land on a dashboard after signing in:
+
+- **Dashboard:** one-click entry to TTOP, Dhruva and Dhruva's sheet editor;
+  today's TTOP interviews and Dhruva call outcomes; requests waiting for review
+  in Dhruva (Pune and HYD) and TTOP's import review; incentives this month per
+  portal and per Dhruva handler; recent activity from both portals; data and
+  setup health (empty tabs, failed doc sync, people waiting for access).
+- **People:** everyone with access, their role, portals, Dhruva role and last
+  sign-in; search; people who signed in with Google but have no access yet
+  (give access or block); add, change, block or remove anyone.
+- **Data import:** load Dhruva's Google Sheets data from CSV files (below).
+- **Dhruva setup:** checks and fills the settings Dhruva's projects need to
+  talk to each other, installs its edit trigger, and lets you view/change any
+  setting (secrets hidden).
+- **Shared candidates & clients:** the sync between the two portals.
+
+Admins see the portal tiles and People (users of their own portal); users go
+straight to their portal.
 
 ## Roles
 
 | Role | Portals | Inside the portal |
 |---|---|---|
-| **Super admin** | Both | TTOP admin; any Dhruva role. Manages everyone on the Access page and the shared-data sync. |
+| **Super admin** | Both | TTOP admin; any Dhruva role. Manages everyone on the People page and the shared-data sync. |
 | **Admin** | The portal(s) ticked for them | TTOP admin, or Dhruva up to ADMIN. Can add and edit **users** of their own portal. |
 | **User** | The portal(s) ticked for them | TTOP user (sees their own candidates), or Dhruva up to HANDLER-level roles. |
 
 How it is enforced:
 - **Entry:** the server checks the role before serving `/ttop/` or `/dhruva/`
   and on every Dhruva call. Someone without access is sent back to the home page.
-- **TTOP:** the Access list writes TTOP's own approval/admin flags
+- **TTOP:** the People list writes TTOP's own approval/admin flags
   (`profiles.approved / role / removed`, `admin_emails`) through database
   triggers, so TTOP's row-level security enforces it even for direct Supabase
   calls. Approvals a TTOP admin makes on TTOP's own Team page are mirrored back
-  into the Access list.
+  into the People list.
 - **Dhruva:** Dhruva's detailed roles (HANDLER, SETUP_SUPPORT, team scopes…)
   are still set in Dhruva Administration. The app role is a ceiling: a *user*
   whose Dhruva account has ADMIN, or an *admin* with SUPER_ADMIN, is refused
-  with a clear message, and the Access page flags the mismatch.
+  with a clear message, and the People page flags the mismatch.
 
 Signing in once (Google) opens both portals. Dhruva's email-code screen is
 skipped: the app creates the Dhruva session with Dhruva's own session code.
@@ -53,39 +74,68 @@ The simplest route is to deploy this folder **to TTOP's existing Vercel
 project** (replace the repository contents). Its address, environment
 variables and TTOP's Supabase schedules then stay as they are.
 
-1. **Database:** Supabase → SQL Editor, run the five files in
+1. **Database:** Supabase → SQL Editor, run the six files in
    `supabase/migrations/` in order. They only add tables (`gs_*` for Dhruva,
    `app_*` for the combined app), functions and triggers; no TTOP table or
-   function is changed. File 4 copies TTOP's current users into the Access list.
-2. **Dhruva data:** copy it from Google Sheets with `tools/SupabaseExport.gs`
-   (paste it into each of the 6 Dhruva Apps Script projects, set `URL`,
-   `SERVICE_ROLE_KEY`, `PROJECT`, run `exportToSupabase`, then delete the file).
-   Project names: `portal`, `pune-call-tracker`, `pune-incentives`,
-   `pune-private-backend`, `hyd-call-tracker`, `hyd-private-backend`.
-3. **Vercel environment variables** (Settings → Environment Variables), see
+   function is changed. File 4 copies TTOP's current users into the People list.
+2. **Vercel environment variables** (Settings → Environment Variables), see
    `.env.example`: TTOP's existing ones (`SUPABASE_URL`, `SUPABASE_ANON_KEY`,
    `SUPABASE_SERVICE_ROLE_KEY`, `CRON_SECRET`, `DB_*`, `VAPID_*`) plus
-   `APP_SECRET` (long random text), `PUBLIC_URL` (the Vercel address) and
-   `OWNER_EMAIL`.
-4. **Google sign-in:** Supabase → Authentication → URL Configuration: the
+   `APP_SECRET` (long random text), `PUBLIC_URL` (the Vercel address),
+   `OWNER_EMAIL` and `SUPER_ADMIN_EMAILS` (your Google address: you are a
+   super admin from the first sign-in, before any Dhruva data exists).
+3. **Google sign-in:** Supabase → Authentication → URL Configuration: the
    Site URL is the Vercel address and `https://<address>/` is in Redirect URLs
    (already the case when you reuse TTOP's project).
-5. **Deploy:** push to the Vercel project (Framework preset: *Other*, no build
+4. **Deploy:** push to the Vercel project (Framework preset: *Other*, no build
    command). `vercel.json` sends every request to one function (`api/index.js`)
    and serves only the `public/` folder as static files.
-6. **Once-a-minute job:** run `supabase/app_schedule.sql`. Supabase then calls
+5. **Once-a-minute job:** run `supabase/app_schedule.sql`. Supabase then calls
    `/app/cron` every minute (Dhruva's timed triggers and the shared candidates
    & clients sync), the same way it already calls TTOP's Doc sync. If you
    deployed to a **new** Vercel address, also run
    `supabase/repoint_ttop_schedules.sql` so TTOP's own schedules follow it.
-7. On the first request the app adds Dhruva's active users to the Access list
-   (Dhruva SUPER_ADMIN → super admin, ADMIN → admin, others → user). Review
-   the **Access** page: a super admin of either portal becomes a super admin of both.
-8. **Shared candidates & clients:** the sync starts in *report only* mode.
+6. **Dhruva data (CSV):** sign in, open **Data import**, and load every tab
+   of the six Dhruva Google Sheets (see *Loading Dhruva data from CSV* below).
+7. **Dhruva setup:** open **Dhruva setup** and press **Apply recommended
+   setup** (fills only missing settings and installs the edit trigger).
+8. Once the `V2 User Access` and `V2 User Roles` tabs are in, the app adds
+   Dhruva's active users to People (Dhruva SUPER_ADMIN → super admin, ADMIN →
+   admin, others → user). Review **People**.
+9. **Shared candidates & clients:** the sync starts in *report only* mode.
    Open **Shared candidates & clients**, review the numbers, then **Turn sync on**.
 
 `npm install && npm run check && npm start` (Node 20+) still runs the same app
 on your own machine for testing, against the same Supabase project.
+
+### Loading Dhruva data from CSV
+
+For each of the six Dhruva spreadsheets (Call Tracker, Incentive tracker,
+Incentive Backend - Private, HYD Incentive Tracker, HYD Incentive Backend -
+Private, Interview Portal Control), open each tab and choose **File → Download
+→ Comma-separated values (.csv)**. Google names each file
+`<Spreadsheet> - <Tab>.csv`; drop them all on **Data import** at once and they
+are matched to their tabs automatically (pick the tab by hand for any file you
+renamed). Big tabs are uploaded in parts.
+
+- Each file **replaces** that tab completely; import again whenever you want to
+  refresh from Google.
+- CSV only carries the text shown on screen, so each column is turned back
+  into real dates, amounts and TRUE/FALSE using that tab's layout
+  (`config/tab-profiles.json`, built from your sheets). Tested on all 72 tabs
+  of your data: every one of the 145,347 values comes back with the same value
+  and type, and Dhruva's incentive scan on the imported data reproduces
+  Google's Incentive Tracker (885 rows, ₹29,500 for November).
+- Two things a CSV cannot carry: **formulas** arrive as their results, and a
+  **timestamp shown as a date only** (e.g. "Submitted At" columns) arrives
+  without its time of day. Dhruva only displays those, it does not calculate
+  with them. To keep times, switch such a column to *Format → Number → Date
+  time* in Google before downloading.
+- A tab with a new layout (not in the profiles) is read the way Google reads
+  typed text.
+
+The Apps Script exporter (`tools/SupabaseExport.gs`) still works as an
+alternative and also copies Script Properties and formulas.
 
 ### How Dhruva runs on Vercel
 

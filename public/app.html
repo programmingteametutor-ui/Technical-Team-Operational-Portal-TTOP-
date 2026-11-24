@@ -54,18 +54,60 @@
   .stat { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin:10px 0; }
   .stat div { background:#f8fafc; border:1px solid var(--line); border-radius:10px; padding:10px; }
   .stat b { display:block; font-size:20px; }
+  main { max-width:1240px; }
+  .badge:not(:empty) { display:inline-block; margin-left:6px; min-width:18px; padding:0 6px; border-radius:999px; background:var(--bad); color:#fff; font-size:11px; line-height:18px; text-align:center; }
+  .quick { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:14px; }
+  .quick .sp { flex:1; }
+  .alerts { background:#fff7ed; border:1px solid #fed7aa; border-radius:12px; padding:10px 14px; margin-bottom:14px; color:#7c2d12; }
+  .alerts div + div { margin-top:4px; }
+  .alerts a, .card a { color:var(--brand); }
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin-bottom:16px; }
+  .kpi { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px 16px; display:flex; flex-direction:column; }
+  .kpi b { font-size:26px; line-height:1.1; font-weight:650; font-variant-numeric:tabular-nums; }
+  .kpi span { font-size:13px; margin-top:4px; }
+  .kpi small { color:var(--muted); font-size:12px; margin-top:2px; }
+  .kpi.warn { border-color:#fdba74; }
+  .grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(420px,1fr)); gap:16px; }
+  .grid3 { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px; }
+  .grid2 > .card, .grid3 > .card { margin-bottom:0; } .grid2, .grid3 { margin-bottom:16px; }
+  .ch { display:flex; justify-content:space-between; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:8px; }
+  .ch .muted { font-size:12px; }
+  table.compact th, table.compact td { padding:6px 6px; font-size:13px; }
+  .num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .nowrap { white-space:nowrap; }
+  .wrap { word-break:break-all; }
+  .scroll { max-height:340px; overflow:auto; }
+  .scroll.tall { max-height:560px; }
+  .st { font-size:12px; padding:1px 7px; border-radius:999px; background:#f1f5f9; }
+  .st-completed { background:#ecfdf5; color:#065f46; } .st-cancelled { background:#fef2f2; color:#991b1b; } .st-rescheduled { background:#fff7ed; color:#9a3412; } .st-scheduled { background:#eff6ff; color:#1e40af; }
+  .mini { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .mini div { background:#f8fafc; border:1px solid var(--line); border-radius:10px; padding:10px; font-size:12px; color:var(--muted); }
+  .mini b { display:block; font-size:18px; color:var(--text); font-variant-numeric:tabular-nums; }
+  .meter { width:40%; } .meter span { display:block; height:8px; border-radius:0 4px 4px 0; background:var(--brand); min-width:2px; }
+  svg.bars { width:100%; height:auto; max-height:150px; }
+  svg.bars .bar { fill:var(--brand); } svg.bars g:hover .bar { fill:var(--brand2); }
+  svg.bars text { font-size:10px; fill:var(--muted); } svg.bars .axis { stroke:var(--line); stroke-width:1; }
+  .ok { color:var(--ok); }
+  .drop { display:block; border:2px dashed var(--line); border-radius:12px; padding:26px; text-align:center; color:var(--muted); cursor:pointer; margin:12px 0; }
+  .drop.on { border-color:var(--brand); background:#eff6ff; }
+  .steps { margin:8px 0; padding-left:20px; }
+  details { border-top:1px solid var(--line); padding:8px 0; } details summary { cursor:pointer; }
+  code { font-size:12px; background:#f1f5f9; padding:1px 5px; border-radius:5px; }
   pre { white-space:pre-wrap; background:#f8fafc; border:1px solid var(--line); border-radius:8px; padding:10px; font-size:12px; max-height:240px; overflow:auto; }
 </style>
 </head>
 <body>
 <div id="root"></div>
 <script src="/api/config"></script>
+<script src="/app/csv.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script>
 (function () {
   "use strict";
   var $root = document.getElementById("root");
-  var SB, ME = null, TAB = "home";
+  var SB, ME = null, TAB = "", GEN = 0;
+  // a response that arrives after the person moved to another tab is dropped
+  function guard(fn) { var g = GEN; return function (x) { if (g === GEN) return fn(x); }; }
   var PORTALS = {
     ttop: { name: "TTOP Portal", desc: "Technical Team Operational Portal: candidates, interviews, assessments, closers and incentives.", url: "/ttop/" },
     dhruva: { name: "Dhruva Portal", desc: "Interview Operations Portal: call schedule, approvals, recovery, reports and incentives.", url: "/dhruva/" }
@@ -145,17 +187,34 @@
 
   function render() {
     var canManage = ME.role === "super_admin" || ME.role === "admin";
+    var tabs = ME.role === "super_admin"
+      ? [["dash", "Dashboard"], ["people", "People"], ["data", "Data import"], ["setup", "Dhruva setup"], ["masters", "Shared candidates &amp; clients"]]
+      : canManage ? [["home", "Portals"], ["people", "People"]] : [];
+    GEN++;
+    if (!tabs.some(function (t) { return t[0] === TAB; })) TAB = tabs.length ? tabs[0][0] : "home";
     var h = '<header><h1>Interview Operations Portal</h1><span class="sp"></span><span class="who">' + esc(ME.email) + ' · ' + ROLE_LABEL[ME.role] + '</span><button id="so">Sign out</button></header><main>';
-    if (canManage) h += '<div class="tabs"><button data-t="home" class="' + (TAB === "home" ? "on" : "") + '">Portals</button><button data-t="access" class="' + (TAB === "access" ? "on" : "") + '">Access</button>' +
-      (ME.role === "super_admin" ? '<button data-t="masters" class="' + (TAB === "masters" ? "on" : "") + '">Shared candidates &amp; clients</button>' : '') + '</div>';
+    if (tabs.length) h += '<div class="tabs">' + tabs.map(function (t) { return '<button data-t="' + t[0] + '" class="' + (TAB === t[0] ? "on" : "") + '">' + t[1] + '<span class="badge" id="b_' + t[0] + '"></span></button>'; }).join("") + '</div>';
     h += '<div id="tab"></div></main>';
     $root.innerHTML = h;
     document.getElementById("so").onclick = signOut;
     Array.prototype.forEach.call(document.querySelectorAll(".tabs button"), function (b) { b.onclick = function () { TAB = b.dataset.t; render(); }; });
-    if (TAB === "access") return renderAccess();
-    if (TAB === "masters") return renderMasters();
-    renderHome();
+    if (canManage) api("signups").then(function (j) { var b = document.getElementById("b_people"); if (b && j.signups.length) b.textContent = j.signups.length; }).catch(function () {});
+    ({ dash: renderDash, people: renderAccess, data: renderData, setup: renderSetup, masters: renderMasters }[TAB] || renderHome)();
   }
+  function tabEl() { return document.getElementById("tab"); }
+  function loading() { tabEl().innerHTML = '<div class="card"><p class="muted">Loading…</p></div>'; }
+  function fail(e) { tabEl().innerHTML = '<div class="card err">' + esc(e.message) + '</div>'; }
+  function bindOpen(root) {
+    Array.prototype.forEach.call((root || document).querySelectorAll("[data-p]"), function (b) { b.onclick = function () { b.disabled = true; b.textContent = "Opening…"; openPortal(b.dataset.p, b.dataset.url); }; });
+  }
+  var nf = function (n) { return Number(n || 0).toLocaleString("en-IN"); };
+  var rs = function (n) { return "₹" + Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 }); };
+  var when = function (t) {
+    if (!t) return "—";
+    var d = new Date(t), s = (Date.now() - d) / 1000;
+    if (s < 60) return "just now"; if (s < 3600) return Math.round(s / 60) + " min ago"; if (s < 86400) return Math.round(s / 3600) + " h ago";
+    if (s < 7 * 86400) return Math.round(s / 86400) + " d ago"; return d.toLocaleDateString();
+  };
 
   function renderHome() {
     var t = '<div class="tiles">';
@@ -165,47 +224,165 @@
         (ok ? '<span class="role">You: ' + ROLE_LABEL[ME.role] + '</span><button class="primary" data-p="' + k + '">Open ' + P.name + '</button>' : '<span class="role">No access</span>') + '</div>';
     });
     t += '</div><p class="muted">Candidates and clients are shared: a change in one portal shows in the other. Interviews and incentives stay with each portal.</p>';
-    document.getElementById("tab").innerHTML = t;
-    Array.prototype.forEach.call(document.querySelectorAll("[data-p]"), function (b) { b.onclick = function () { b.disabled = true; b.textContent = "Opening…"; openPortal(b.dataset.p); }; });
+    tabEl().innerHTML = t;
+    bindOpen();
   }
 
-  /* ---------------- Access ---------------- */
+  /* ---------------- Dashboard (super admin) ---------------- */
+  function kpi(v, label, sub, tone) { return '<div class="kpi' + (tone ? " " + tone : "") + '"><b>' + v + '</b><span>' + label + '</span>' + (sub ? '<small>' + sub + '</small>' : '') + '</div>'; }
+  function bars(days) {
+    if (!days || !days.length) return '';
+    var max = Math.max.apply(null, days.map(function (d) { return d.n; }).concat([1])), W = 28, H = 90, gap = 2;
+    var svg = '<svg class="bars" viewBox="0 0 ' + (days.length * (W + gap)) + ' ' + (H + 18) + '" role="img" aria-label="TTOP interviews per day, last 14 days">';
+    days.forEach(function (d, i) {
+      var h = Math.max(d.n ? 3 : 0, Math.round(d.n / max * H)), x = i * (W + gap) + 6, w = W - 12, y = H - h;
+      var label = new Date(d.day + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }) + ": " + d.n + " interview" + (d.n === 1 ? "" : "s");
+      svg += '<g><title>' + esc(label) + '</title><rect x="' + (i * (W + gap)) + '" y="0" width="' + W + '" height="' + (H + 18) + '" fill="transparent"/>' +
+        (h ? '<path d="M' + x + ' ' + H + 'V' + (y + 4) + 'q0 -4 4 -4h' + (w - 8) + 'q4 0 4 4V' + H + 'z" class="bar"/>' : '') +
+        (i % 2 === (days.length - 1) % 2 ? '<text x="' + (i * (W + gap) + W / 2) + '" y="' + (H + 14) + '" text-anchor="middle">' + Number(d.day.slice(8)) + '</text>' : '') + '</g>';
+    });
+    return svg + '<line x1="0" x2="' + (days.length * (W + gap)) + '" y1="' + H + '" y2="' + H + '" class="axis"/></svg>';
+  }
+  function handlerTable(list) {
+    if (!list || !list.length) return '<p class="muted">Nothing this month yet.</p>';
+    var max = Math.max.apply(null, list.map(function (x) { return x.amount; }).concat([1]));
+    return '<table class="compact"><tbody>' + list.map(function (x) {
+      return '<tr><td>' + esc(x.handler) + '</td><td class="meter"><span style="width:' + Math.round(x.amount / max * 100) + '%"></span></td><td class="num">' + rs(x.amount) + '</td><td class="muted num">' + x.promotions + 'P · ' + x.selections + 'S</td></tr>';
+    }).join("") + '</tbody></table>';
+  }
+  function sum(o) { return Object.keys(o || {}).reduce(function (a, k) { return a + (o[k] || 0); }, 0); }
+
+  function renderDash() {
+    loading();
+    Promise.all([api("overview"), api("dhruva-setup").catch(function () { return null; })]).then(guard(function (r) {
+      var j = r[0], setup = r[1], T = j.ttop || {}, C = T.counts || {}, D = j.dhruva, U = j.users || {};
+      var pune = D.pune, hyd = D.hyd;
+      var dhruvaEmpty = D.data.every(function (w) { return !w.rows; });
+      var alerts = [];
+      if (dhruvaEmpty) alerts.push('Dhruva has no sheet data yet. <a href="#" data-go="data">Import the CSV files</a>.');
+      else { var empties = D.data.reduce(function (a, w) { return a + w.empty; }, 0); if (empties) alerts.push(empties + ' Dhruva tab' + (empties === 1 ? " is" : "s are") + ' empty. <a href="#" data-go="data">See Data import</a>.'); }
+      if (setup && !setup.ready) alerts.push('Dhruva setup is incomplete (bridges or edit triggers). <a href="#" data-go="setup">Finish setup</a>.');
+      if (U.pending) alerts.push(U.pending + ' person' + (U.pending === 1 ? " is" : "s are") + ' waiting for access. <a href="#" data-go="people">Review</a>.');
+      if (j.ttopError) alerts.push('TTOP figures unavailable: ' + esc(j.ttopError) + ' (run migration 6).');
+      if (T.last_sync && !T.last_sync.ok) alerts.push('Last TTOP doc sync failed ' + when(T.last_sync.ran_at) + ': ' + esc(T.last_sync.error || T.last_sync.message || "") + '.');
+
+      var dPending = sum(pune.pending) + sum(hyd.pending);
+      var h = '<div class="quick"><button class="primary" data-p="ttop">Open TTOP</button><button class="primary" data-p="dhruva">Open Dhruva</button>' +
+        '<button data-p="dhruva" data-url="/sheets">Dhruva sheet editor</button><span class="sp"></span><span class="muted">' + esc(new Date(j.generatedAt).toLocaleString(undefined, { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })) + '</span><button id="refresh">Refresh</button></div>';
+      if (alerts.length) h += '<div class="alerts">' + alerts.map(function (a) { return '<div>' + a + '</div>'; }).join("") + '</div>';
+
+      h += '<div class="kpis">' +
+        kpi(nf(C.today), "TTOP interviews today", nf(C.today_done) + " completed") +
+        kpi(nf(pune.calls.recorded + hyd.calls.recorded), "Dhruva calls updated today", "Pune " + pune.calls.recorded + " · HYD " + hyd.calls.recorded) +
+        kpi(nf(dPending + (C.import_review || 0)), "Waiting for review", "Dhruva requests " + dPending + " · TTOP import " + nf(C.import_review || 0), dPending + (C.import_review || 0) ? "warn" : "") +
+        kpi(rs((C.incentive_month_amt || 0) + pune.incentives.monthAmount + hyd.incentives.monthAmount), "Incentives this month", "TTOP " + rs(C.incentive_month_amt) + " · Dhruva " + rs(pune.incentives.monthAmount + hyd.incentives.monthAmount)) +
+        kpi(nf(C.placed_month), "Placed this month", nf(C.closers_month || 0) + " closers · " + nf(C.expected_open || 0) + " expected") +
+        kpi(nf(U.total), "People with access", nf(U.activeWeek) + " signed in this week") + '</div>';
+
+      // Today
+      var tt = (T.today || []);
+      h += '<div class="grid2"><div class="card"><div class="ch"><b>TTOP — today</b><span class="muted">' + nf(C.next7) + ' scheduled next 7 days · ' + nf(C.prep_pending) + ' need prep (next 3 days)</span></div>' +
+        (tt.length ? '<div class="scroll"><table class="compact"><thead><tr><th>Time</th><th>Candidate · Client</th><th>Round</th><th>Status</th></tr></thead><tbody>' + tt.map(function (i) {
+          return '<tr><td class="num">' + esc(i.time) + '</td><td><b>' + esc(i.candidate) + '</b><div class="muted">' + esc(i.client) + (i.support ? ' · ' + esc(i.support) : '') + '</div></td><td>' + esc(i.round) + '<div class="muted">' + esc(i.type) + '</div></td><td><span class="st st-' + esc(String(i.status).toLowerCase()) + '">' + esc(i.status) + '</span>' + (i.prep !== "Done" && i.status === "Scheduled" ? '<div class="muted">prep ' + esc(i.prep) + '</div>' : '') + '</td></tr>';
+        }).join("") + '</tbody></table></div>' : '<p class="muted">No interviews today.</p>') +
+        '<div class="ch" style="margin-top:14px"><b>Interviews per day</b><span class="muted">last 14 days</span></div>' + bars(T.by_day) + '</div>';
+
+      var callRows = function (team, c) { return c.today.map(function (x) { return '<tr><td>' + team + '</td><td>' + esc(x.text.split(" – ").slice(0, 2).join(" – ")) + '</td><td>' + esc(x.handler) + '</td><td><span class="st st-' + esc(x.status.toLowerCase()) + '">' + esc(x.status) + '</span></td></tr>'; }).join(""); };
+      var allCalls = callRows("Pune", pune.calls) + callRows("HYD", hyd.calls);
+      h += '<div class="card"><div class="ch"><b>Dhruva — calls updated today</b><span class="muted">' + ["Completed", "Rescheduled", "Cancelled"].map(function (s) { return s + " " + ((pune.calls.byStatus[s] || 0) + (hyd.calls.byStatus[s] || 0)); }).join(" · ") + '</span></div>' +
+        (allCalls ? '<div class="scroll"><table class="compact"><thead><tr><th>Team</th><th>Call</th><th>Handler</th><th>Status</th></tr></thead><tbody>' + allCalls + '</tbody></table></div>' : '<p class="muted">No call outcomes recorded today yet.</p>') +
+        '<div class="ch" style="margin-top:14px"><b>Waiting for review in Dhruva</b></div><table class="compact"><thead><tr><th></th><th class="num">Pune</th><th class="num">HYD</th></tr></thead><tbody>' +
+        Object.keys(Object.assign({}, pune.pending, hyd.pending)).map(function (k) { return '<tr><td>' + esc(k) + '</td><td class="num">' + nf(pune.pending[k]) + '</td><td class="num">' + nf(hyd.pending[k]) + '</td></tr>'; }).join("") +
+        '<tr><td>Recovery exceptions</td><td class="num">' + nf(pune.recoveryExceptions) + '</td><td class="num">' + nf(hyd.recoveryExceptions) + '</td></tr></tbody></table></div></div>';
+
+      // Incentives
+      h += '<div class="grid3"><div class="card"><div class="ch"><b>TTOP incentives</b></div><div class="mini">' +
+        '<div><b>' + rs(C.incentive_month_amt) + '</b>this month</div><div><b>' + rs(C.incentive_pending_amt) + '</b>pending (' + nf(C.incentive_pending) + ')</div><div><b>' + nf(C.candidates) + '</b>active candidates</div><div><b>' + nf(C.clients) + '</b>clients</div></div></div>' +
+        '<div class="card"><div class="ch"><b>Dhruva Pune — this month</b><span class="muted">' + rs(pune.incentives.monthAmount) + ' · ' + nf(pune.incentives.monthCount) + ' entries</span></div>' + handlerTable(pune.incentives.byHandler) + '</div>' +
+        '<div class="card"><div class="ch"><b>Dhruva HYD — this month</b><span class="muted">' + rs(hyd.incentives.monthAmount) + ' · ' + nf(hyd.incentives.monthCount) + ' entries</span></div>' + handlerTable(hyd.incentives.byHandler) + '</div></div>';
+
+      // Activity
+      var act = (T.activity || []).map(function (a) { return { at: a.at, src: "TTOP", who: a.who, what: a.action + (a.entity ? " · " + a.entity : "") }; })
+        .concat(D.activity.map(function (a) { return { at: a.at, src: "Dhruva " + a.team, who: a.who, what: a.action + (a.detail ? " · " + a.detail : "") }; }))
+        .sort(function (a, b) { return new Date(b.at) - new Date(a.at); }).slice(0, 15);
+      h += '<div class="grid2"><div class="card"><div class="ch"><b>Recent activity</b><span class="muted">both portals</span></div>' + (act.length ? '<table class="compact"><tbody>' + act.map(function (a) {
+        return '<tr><td class="muted nowrap">' + when(a.at) + '</td><td><span class="pill">' + esc(a.src) + '</span></td><td>' + esc(a.what).slice(0, 160) + '<div class="muted">' + esc(a.who || "") + '</div></td></tr>';
+      }).join("") + '</tbody></table>' : '<p class="muted">No activity yet.</p>') + '</div>';
+      h += '<div class="card"><div class="ch"><b>System</b></div><table class="compact"><tbody>' +
+        '<tr><td>People</td><td>' + nf(U.superAdmins) + ' super admins · ' + nf(U.admins) + ' admins · ' + nf(U.users) + ' users</td></tr>' +
+        '<tr><td>Shared masters (Dhruva)</td><td>' + nf(D.masters.candidates) + ' candidates · ' + nf(D.masters.clients) + ' clients</td></tr>' +
+        '<tr><td>TTOP doc sync</td><td>' + (T.last_sync ? (T.last_sync.ok ? "OK " : '<span class="err">Failed</span> ') + when(T.last_sync.ran_at) + ' · ' + nf(T.last_sync.added) + ' added, ' + nf(T.last_sync.updated) + ' updated' : '<span class="muted">no runs yet</span>') + '</td></tr>' +
+        '<tr><td>Dhruva setup</td><td>' + (setup ? (setup.ready ? "Ready" : '<a href="#" data-go="setup">Incomplete</a>') : "—") + '</td></tr>' +
+        D.data.map(function (w) { return '<tr><td>' + esc(w.title) + '</td><td>' + nf(w.rows) + ' rows in ' + w.tabs.length + ' tabs' + (w.empty ? ' · <span class="err">' + w.empty + ' empty</span>' : '') + '</td></tr>'; }).join("") +
+        '</tbody></table></div></div>';
+
+      tabEl().innerHTML = h;
+      bindOpen(tabEl());
+      document.getElementById("refresh").onclick = renderDash;
+      Array.prototype.forEach.call(tabEl().querySelectorAll("[data-go]"), function (a) { a.onclick = function (e) { e.preventDefault(); TAB = a.dataset.go; render(); }; });
+    })).catch(guard(fail));
+  }
+
+  /* ---------------- People ---------------- */
   function renderAccess() {
-    var tab = document.getElementById("tab");
-    tab.innerHTML = '<div class="card"><p class="muted">Loading…</p></div>';
-    api("users").then(function (j) {
-      var rows = j.users.map(function (u) {
-        var warn = u.dhruva && u.dhruva.problem ? '<div class="pill warn" title="' + esc(u.dhruva.problem) + '">Dhruva role mismatch</div>' : '';
-        var dh = u.dhruva && u.dhruva.known ? esc(u.dhruva.roles.join(", ") || "—") + (u.dhruva.active ? "" : " (inactive)") : '<span class="muted">not in Dhruva</span>';
-        return '<tr><td><b>' + esc(u.name || "") + '</b><div class="muted">' + esc(u.email) + '</div></td>' +
-          '<td><span class="pill ' + u.role + '">' + ROLE_LABEL[u.role] + '</span>' + (u.active ? "" : ' <span class="pill warn">off</span>') + '</td>' +
-          '<td>' + u.portals.map(function (p) { return '<span class="pill">' + (p === "ttop" ? "TTOP" : "Dhruva") + '</span>'; }).join("") + '</td>' +
-          '<td>' + dh + warn + '</td>' +
-          '<td>' + (u.canEdit ? '<button data-e="' + esc(u.email) + '">Edit</button>' : '') + '</td></tr>';
-      }).join("");
-      tab.innerHTML = '<div class="card"><div class="row" style="justify-content:space-between"><div><b>People and access</b><div class="muted">' +
+    loading();
+    Promise.all([api("users"), api("signups").catch(function () { return { signups: [] }; })]).then(guard(function (r) {
+      var j = r[0], sign = r[1].signups, Q = "";
+      var draw = function () {
+        var q = Q.toLowerCase();
+        var list = j.users.filter(function (u) { return !q || (u.email + " " + (u.name || "") + " " + u.role + " " + u.portals.join(" ")).toLowerCase().indexOf(q) >= 0; });
+        document.getElementById("ulist").innerHTML = list.map(function (u) {
+          var warn = u.dhruva && u.dhruva.problem ? '<div class="pill warn" title="' + esc(u.dhruva.problem) + '">Dhruva role mismatch</div>' : '';
+          var dh = u.dhruva && u.dhruva.known ? esc(u.dhruva.roles.join(", ") || "—") + (u.dhruva.active ? "" : " (inactive)") : '<span class="muted">not in Dhruva</span>';
+          return '<tr><td><b>' + esc(u.name || "") + '</b><div class="muted">' + esc(u.email) + '</div></td>' +
+            '<td><span class="pill ' + u.role + '">' + ROLE_LABEL[u.role] + '</span>' + (u.active ? "" : ' <span class="pill warn">blocked</span>') + '</td>' +
+            '<td>' + (u.portals.length ? u.portals.map(function (p) { return '<span class="pill">' + (p === "ttop" ? "TTOP" : "Dhruva") + '</span>'; }).join("") : '<span class="muted">none</span>') + '</td>' +
+            '<td>' + dh + warn + '</td><td class="muted nowrap">' + when(u.lastLogin) + '</td>' +
+            '<td>' + (u.canEdit ? '<button data-e="' + esc(u.email) + '">Edit</button>' : '') + '</td></tr>';
+        }).join("") || '<tr><td colspan="6" class="muted">No match.</td></tr>';
+        Array.prototype.forEach.call(tabEl().querySelectorAll("[data-e]"), function (b) { b.onclick = function () { editUser(j.users.find(function (u) { return u.email === b.dataset.e; })); }; });
+      };
+      var roles = { super_admin: 0, admin: 0, user: 0 }, blocked = 0;
+      j.users.forEach(function (u) { if (u.active) roles[u.role]++; else blocked++; });
+      var h = '';
+      if (sign.length) h += '<div class="card"><div class="ch"><b>Waiting for access</b><span class="muted">signed in with Google, not set up yet</span></div><table class="compact"><tbody>' + sign.map(function (s) {
+        return '<tr><td><b>' + esc(s.name) + '</b><div class="muted">' + esc(s.email) + '</div></td><td class="muted">' + when(s.signed_up) + '</td><td style="text-align:right"><button class="primary" data-ok="' + esc(s.email) + '" data-n="' + esc(s.name) + '">Give access…</button> ' +
+          (ME.role === "super_admin" ? '<button class="danger" data-no="' + esc(s.email) + '">Block</button>' : '') + '</td></tr>';
+      }).join("") + '</tbody></table></div>';
+      h += '<div class="card"><div class="row" style="justify-content:space-between"><div><b>People and access</b><div class="muted">' +
         (ME.role === "super_admin" ? "Super admins open both portals. Admins and users open the portals ticked for them." : "You can add and change users of your portal.") +
         ' TTOP access follows this list automatically. Roles inside Dhruva are set in Dhruva Administration; the role here is the ceiling.</div></div>' +
         '<button class="primary" id="add">Add person</button></div>' +
-        '<table style="margin-top:12px"><thead><tr><th>Person</th><th>Role</th><th>Portals</th><th>Dhruva role</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>';
-      document.getElementById("add").onclick = function () { editUser(null, j.users); };
-      Array.prototype.forEach.call(tab.querySelectorAll("[data-e]"), function (b) { b.onclick = function () { editUser(j.users.find(function (u) { return u.email === b.dataset.e; }), j.users); }; });
-    }).catch(function (e) { tab.innerHTML = '<div class="card err">' + esc(e.message) + '</div>'; });
+        '<div class="row" style="margin-top:12px"><input type="text" id="q" placeholder="Search name, email, role, portal" style="flex:1;min-width:220px"><span class="muted">' +
+        roles.super_admin + ' super admins · ' + roles.admin + ' admins · ' + roles.user + ' users' + (blocked ? ' · ' + blocked + ' blocked' : '') + '</span></div>' +
+        '<div class="scroll tall"><table style="margin-top:8px"><thead><tr><th>Person</th><th>Role</th><th>Portals</th><th>Dhruva role</th><th>Last sign-in</th><th></th></tr></thead><tbody id="ulist"></tbody></table></div></div>';
+      tabEl().innerHTML = h;
+      draw();
+      document.getElementById("q").oninput = function () { Q = this.value; draw(); };
+      document.getElementById("add").onclick = function () { editUser(null); };
+      Array.prototype.forEach.call(tabEl().querySelectorAll("[data-ok]"), function (b) { b.onclick = function () { editUser(null, { email: b.dataset.ok, name: b.dataset.n }); }; });
+      Array.prototype.forEach.call(tabEl().querySelectorAll("[data-no]"), function (b) {
+        b.onclick = function () {
+          if (!confirm("Block " + b.dataset.no + "? They stay signed out of both portals and leave this list. You can give access later from People.")) return;
+          api("users", { email: b.dataset.no, role: "user", portals: [], active: false }).then(renderAccess).catch(function (e) { alert(e.message); });
+        };
+      });
+    })).catch(guard(fail));
   }
 
-  function editUser(u, all) {
+  function editUser(u, prefill) {
     var isNew = !u;
-    u = u || { email: "", name: "", role: "user", portals: ME.role === "admin" ? ME.portals.slice() : [], active: true };
+    u = u || { email: (prefill && prefill.email) || "", name: (prefill && prefill.name) || "", role: "user", portals: ME.role === "admin" ? ME.portals.slice() : [], active: true };
     var roles = ME.role === "super_admin" ? ["super_admin", "admin", "user"] : ["user"];
     var portals = ME.role === "super_admin" ? ["ttop", "dhruva"] : ME.portals;
     var d = document.createElement("dialog");
-    d.innerHTML = '<h3 style="margin-top:0">' + (isNew ? "Add person" : "Edit " + esc(u.email)) + '</h3>' +
-      '<label>Email</label><input type="email" id="f_email" value="' + esc(u.email) + '"' + (isNew ? "" : " disabled") + '>' +
+    d.innerHTML = '<h3 style="margin-top:0">' + (isNew ? (prefill ? "Give access" : "Add person") : "Edit " + esc(u.email)) + '</h3>' +
+      '<label>Email</label><input type="email" id="f_email" value="' + esc(u.email) + '"' + (isNew && !prefill ? "" : " disabled") + '>' +
       '<label>Name</label><input type="text" id="f_name" value="' + esc(u.name || "") + '">' +
       '<label>Role</label><select id="f_role">' + roles.map(function (r) { return '<option value="' + r + '"' + (r === u.role ? " selected" : "") + '>' + ROLE_LABEL[r] + '</option>'; }).join("") + '</select>' +
       '<label>Portals</label><div id="f_portals">' + portals.map(function (p) { return '<label style="display:inline-flex;gap:6px;font-weight:400;margin-right:14px"><input type="checkbox" value="' + p + '"' + (u.portals.indexOf(p) >= 0 ? " checked" : "") + '>' + (p === "ttop" ? "TTOP" : "Dhruva") + '</label>'; }).join("") + '</div>' +
-      '<label style="display:flex;gap:6px;font-weight:400;margin-top:12px"><input type="checkbox" id="f_active"' + (u.active ? " checked" : "") + '> Active</label>' +
-      '<p class="muted" id="f_hint" style="font-size:12px">Super admins always get both portals.</p><p class="err" id="f_err"></p>' +
+      '<label style="display:flex;gap:6px;font-weight:400;margin-top:12px"><input type="checkbox" id="f_active"' + (u.active ? " checked" : "") + '> Active (untick to block)</label>' +
+      '<p class="muted" style="font-size:12px">Super admins always get both portals. Admins manage their portal; users see only their own work.</p><p class="err" id="f_err"></p>' +
       '<div class="row" style="justify-content:space-between;margin-top:8px">' + (isNew ? "<span></span>" : '<button class="danger" id="f_del">Remove</button>') +
       '<div class="row"><button id="f_cancel">Cancel</button><button class="primary" id="f_save">Save</button></div></div>';
     document.body.appendChild(d); d.showModal();
@@ -217,20 +394,166 @@
         portals: Array.prototype.map.call(d.querySelectorAll("#f_portals input:checked"), function (x) { return x.value; }),
         active: d.querySelector("#f_active").checked
       };
-      api("users", body).then(function () { close(); renderAccess(); }).catch(function (e) { d.querySelector("#f_err").textContent = e.message; });
+      api("users", body).then(function () { close(); render(); }).catch(function (e) { d.querySelector("#f_err").textContent = e.message; });
     };
     var del = d.querySelector("#f_del");
     if (del) del.onclick = function () {
       if (!confirm("Remove " + u.email + " from the portal? They lose access to both portals.")) return;
-      api("users?email=" + encodeURIComponent(u.email), null, "DELETE").then(function () { close(); renderAccess(); }).catch(function (e) { d.querySelector("#f_err").textContent = e.message; });
+      api("users?email=" + encodeURIComponent(u.email), null, "DELETE").then(function () { close(); render(); }).catch(function (e) { d.querySelector("#f_err").textContent = e.message; });
     };
+  }
+
+  /* ---------------- Data import (CSV) ---------------- */
+  var FILES = [];
+  function matchName(name, targets) {
+    var base = name.replace(/\.csv$/i, "").replace(/\s+\(\d+\)$/, "").trim(), best = null;
+    targets.forEach(function (w) {
+      var t = w.title + " - ";
+      if (base.toLowerCase().indexOf(t.toLowerCase()) === 0 && (!best || w.title.length > best.w.title.length)) best = { w: w, tab: base.slice(t.length) };
+    });
+    if (!best) return null;
+    var hit = best.w.tabs.filter(function (t) { return t.name.toLowerCase() === best.tab.toLowerCase(); })[0];
+    return { id: best.w.id, tab: hit ? hit.name : best.tab };
+  }
+  function renderData() {
+    loading();
+    api("import").then(guard(function (j) {
+      var targets = j.targets;
+      var opts = function (f) {
+        return '<select data-t="' + f.key + '"><option value="">— choose where it goes —</option>' + targets.map(function (w) {
+          return '<optgroup label="' + esc(w.title) + '">' + w.tabs.map(function (t) { var v = w.id + "|" + t.name; return '<option value="' + esc(v) + '"' + (f.target === v ? " selected" : "") + '>' + esc(t.name) + (t.rows ? " (" + nf(t.rows) + " rows now)" : " (empty)") + '</option>'; }).join("") + '</optgroup>';
+        }).join("") + '</select>';
+      };
+      var tabInfo = function (v) { if (!v) return null; var p = v.split("|"), w = targets.filter(function (x) { return x.id === p[0]; })[0]; return w && w.tabs.filter(function (t) { return t.name === p[1]; })[0]; };
+      var drawFiles = function () {
+        var box = document.getElementById("files");
+        if (!FILES.length) { box.innerHTML = ''; document.getElementById("go").disabled = true; return; }
+        box.innerHTML = '<table class="compact"><thead><tr><th>File</th><th>Rows</th><th>Goes into</th><th>Status</th></tr></thead><tbody>' + FILES.map(function (f) {
+          var t = tabInfo(f.target), warn = "";
+          if (t && t.header && f.rows[0] && t.rows) {
+            var a = t.header.slice(0, 8).map(String).join("|").trim(), b = f.rows[0].slice(0, 8).join("|").trim();
+            if (a !== b) warn = '<div class="err">Header differs from the current tab — check this is the right file.</div>';
+          }
+          if (t && !t.profiled) warn += '<div class="muted">New tab layout: values are read the way Google reads typed text.</div>';
+          return '<tr><td><b>' + esc(f.name) + '</b>' + warn + '</td><td class="num">' + nf(f.rows.length) + '</td><td>' + opts(f) + (t && t.rows ? '<div class="muted">replaces ' + nf(t.rows) + ' rows</div>' : '') + '</td><td id="st_' + f.key + '">' + (f.status || (f.target ? "Ready" : '<span class="err">Choose a tab</span>')) + '</td></tr>';
+        }).join("") + '</tbody></table>';
+        Array.prototype.forEach.call(box.querySelectorAll("select[data-t]"), function (s) { s.onchange = function () { FILES.filter(function (f) { return f.key === s.dataset.t; })[0].target = s.value; drawFiles(); }; });
+        document.getElementById("go").disabled = !FILES.some(function (f) { return f.target && !f.done; });
+      };
+      var addFiles = function (list) {
+        Array.prototype.forEach.call(list, function (file) {
+          var rd = new FileReader();
+          rd.onload = function () {
+            var rows = window.parseCsv(String(rd.result));
+            while (rows.length && rows[rows.length - 1].every(function (c) { return c === ""; })) rows.pop();
+            var m = matchName(file.name, targets);
+            FILES = FILES.filter(function (f) { return f.name !== file.name; });
+            FILES.push({ key: "f" + Math.random().toString(36).slice(2, 9), name: file.name, rows: rows, target: m ? m.id + "|" + m.tab : "" });
+            drawFiles();
+          };
+          rd.readAsText(file);
+        });
+      };
+      var dataTable = j.data.map(function (w) {
+        return '<details><summary><b>' + esc(w.title) + '</b> <span class="muted">' + nf(w.rows) + ' rows · ' + w.tabs.length + ' tabs' + (w.empty ? ' · ' + w.empty + ' empty' : '') + '</span></summary><table class="compact"><tbody>' + w.tabs.map(function (t) {
+          return '<tr><td>' + esc(t.name) + '</td><td class="num">' + (t.rows ? nf(t.rows) : t.expectEmpty ? '<span class="muted">empty in Google too</span>' : '<span class="err">empty</span>') + '</td><td class="muted">' + (t.imported ? "imported " + when(t.imported) + " by " + esc(t.by || "") : "") + '</td></tr>';
+        }).join("") + '</tbody></table></details>';
+      }).join("");
+      tabEl().innerHTML = '<div class="card"><b>Import Dhruva sheet data from CSV</b><ol class="muted steps">' +
+        '<li>Open each Dhruva Google Sheet and pick a tab.</li><li><b>File → Download → Comma-separated values (.csv)</b>. Google names the file “<i>Spreadsheet - Tab</i>.csv”, which is how it is matched here.</li>' +
+        '<li>Drop all the files below (as many as you like), check where each goes, then Import.</li></ol>' +
+        '<p class="muted">Each file replaces that tab completely. Dates, amounts and TRUE/FALSE are turned back into real values using the layout of each tab, so the portal logic works as in Google. Formulas come in as their values. Timestamps shown as a date only in Google arrive without the time of day.</p>' +
+        '<label class="drop" id="drop"><input type="file" id="pick" accept=".csv,text/csv" multiple hidden>Drop CSV files here or <u>choose files</u></label>' +
+        '<div id="files"></div><div class="row" style="margin-top:12px"><button class="primary" id="go" disabled>Import</button><button id="clr">Clear list</button><span class="muted" id="prog"></span></div></div>' +
+        '<div class="card"><div class="ch"><b>What is in Dhruva now</b></div>' + dataTable + '</div>';
+      drawFiles();
+      var drop = document.getElementById("drop");
+      document.getElementById("pick").onchange = function () { addFiles(this.files); this.value = ""; };
+      drop.ondragover = function (e) { e.preventDefault(); drop.classList.add("on"); };
+      drop.ondragleave = function () { drop.classList.remove("on"); };
+      drop.ondrop = function (e) { e.preventDefault(); drop.classList.remove("on"); addFiles(e.dataTransfer.files); };
+      document.getElementById("clr").onclick = function () { FILES = []; drawFiles(); };
+      document.getElementById("go").onclick = function () {
+        var todo = FILES.filter(function (f) { return f.target && !f.done; });
+        var seen = {}, dup = todo.filter(function (f) { if (seen[f.target]) return true; seen[f.target] = 1; return false; });
+        if (dup.length) return alert("Two files are set to go into the same tab: " + dup[0].target.split("|")[1]);
+        var replacing = todo.filter(function (f) { var t = tabInfo(f.target); return t && t.rows; }).length;
+        if (replacing && !confirm(replacing + " tab(s) already hold data and will be replaced by the files. Continue?")) return;
+        var btn = this; btn.disabled = true;
+        var i = 0, okN = 0, bad = 0;
+        var setSt = function (f, html) { f.status = html; var el = document.getElementById("st_" + f.key); if (el) el.innerHTML = html; };
+        var next = function () {
+          if (i >= todo.length) { var msg = okN + " imported" + (bad ? ", " + bad + " failed" : ""); renderData(); setTimeout(function () { var el = document.getElementById("prog"); if (el) el.textContent = msg; }, 600); return; }
+          var f = todo[i++], p = f.target.split("|");
+          document.getElementById("prog").textContent = "Importing " + i + " of " + todo.length + "…";
+          setSt(f, "Uploading…");
+          uploadRows(f, p[0], p[1], function (s) { setSt(f, s); }).then(function (r) {
+            f.done = true; okN++;
+            setSt(f, '<span class="ok">✓ ' + nf(r.rows) + ' rows</span><div class="muted">' + nf(r.dates) + ' dates · ' + nf(r.numbers) + ' numbers' + (r.created ? " · new tab" : "") + '</div>');
+          }).catch(function (e) { bad++; setSt(f, '<span class="err">' + esc(e.message) + '</span>'); }).then(next);
+        };
+        next();
+      };
+    })).catch(guard(fail));
+  }
+  // Vercel accepts at most 4.5 MB per request, so big files go up in parts
+  function uploadRows(f, spreadsheetId, tab, status) {
+    var LIMIT = 2500000, parts = [], cur = [], size = 0;
+    f.rows.forEach(function (r) {
+      var s = JSON.stringify(r).length + 1;
+      if (cur.length && size + s > LIMIT) { parts.push(cur); cur = []; size = 0; }
+      cur.push(r); size += s;
+    });
+    if (cur.length || !parts.length) parts.push(cur);
+    var base = { action: "apply", spreadsheetId: spreadsheetId, tab: tab, fileName: f.name, totalRows: f.rows.length };
+    if (parts.length === 1) { status("Saving…"); return api("import", Object.assign(base, { rows: parts[0] })); }
+    var id = "imp-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10), n = 0;
+    var send = function () {
+      if (n >= parts.length) { status("Saving…"); return api("import", Object.assign(base, { importId: id, chunks: parts.length })); }
+      status("Uploading part " + (n + 1) + " of " + parts.length + "…");
+      return api("import", { action: "chunk", importId: id, n: n, rows: parts[n] }).then(function () { n++; return send(); });
+    };
+    return send();
+  }
+
+  /* ---------------- Dhruva setup ---------------- */
+  function renderSetup() {
+    loading();
+    api("dhruva-setup").then(guard(function (j) {
+      var h = '<div class="card"><div class="ch"><b>Dhruva setup</b>' + (j.ready ? '<span class="ok">✓ Ready</span>' : '<span class="err">Needs setup</span>') + '</div>' +
+        '<p class="muted">The Dhruva projects talk to each other through settings (Script Properties) and an edit trigger that Google kept for them. When the data comes from CSV files these are not there yet. <b>Apply recommended setup</b> fills in only what is missing — it never changes a value that is already set.</p>' +
+        '<table class="compact"><thead><tr><th>Project</th><th>Setting</th><th>Status</th></tr></thead><tbody>' +
+        j.checks.map(function (c) { return '<tr><td>' + esc(c.project) + '</td><td><code>' + esc(c.key) + '</code>' + (c.note ? '<div class="muted">' + esc(c.note) + '</div>' : '') + '</td><td>' + (c.ok ? '<span class="ok">✓ set</span>' : '<span class="err">missing</span>') + '</td></tr>'; }).join("") +
+        j.triggers.map(function (t) { return '<tr><td>' + esc(t.project) + '</td><td>Edit trigger <code>' + esc(t.handler) + '</code></td><td>' + (t.ok ? '<span class="ok">✓ installed</span>' : '<span class="err">missing</span>') + '</td></tr>'; }).join("") +
+        '</tbody></table><div class="row" style="margin-top:12px"><button class="primary" id="apply"' + (j.ready ? " disabled" : "") + '>Apply recommended setup</button><span class="muted" id="ares"></span></div></div>';
+      h += '<div class="card"><div class="ch"><b>All settings</b><span class="muted">secrets are hidden</span></div><div class="scroll tall"><table class="compact"><thead><tr><th>Project</th><th>Key</th><th>Value</th><th></th></tr></thead><tbody>' +
+        j.properties.map(function (p) { return '<tr><td>' + esc(p.project) + '</td><td><code>' + esc(p.key) + '</code></td><td class="wrap">' + esc(p.value) + '</td><td><button data-k="' + esc(p.project + "|" + p.key) + '">Change</button></td></tr>'; }).join("") +
+        '</tbody></table></div><div class="row" style="margin-top:12px"><button id="addp">Add setting</button></div></div>';
+      tabEl().innerHTML = h;
+      document.getElementById("apply").onclick = function () {
+        var b = this; b.disabled = true; b.textContent = "Applying…";
+        api("dhruva-setup", { action: "run" }).then(function (r) {
+          var bad = (r.ran || []).filter(function (x) { return !x.ok; });
+          if (bad.length) alert("Some steps failed:\n" + bad.map(function (x) { return x.project + " " + x.fn + ": " + x.error; }).join("\n"));
+          renderSetup();
+        }).catch(function (e) { alert(e.message); renderSetup(); });
+      };
+      var edit = function (project, key) {
+        project = project || prompt("Project (portal, pune-call-tracker, pune-incentives, pune-private-backend, hyd-call-tracker, hyd-private-backend):"); if (!project) return;
+        key = key || prompt("Setting key:"); if (!key) return;
+        var v = prompt("New value for " + project + " " + key + " (leave empty and press OK to delete it):", "");
+        if (v === null) return;
+        api("dhruva-setup", { action: "set", project: project, key: key, value: v === "" ? null : v }).then(renderSetup).catch(function (e) { alert(e.message); });
+      };
+      document.getElementById("addp").onclick = function () { edit(); };
+      Array.prototype.forEach.call(tabEl().querySelectorAll("[data-k]"), function (b) { b.onclick = function () { var p = b.dataset.k.split("|"); edit(p[0], p[1]); }; });
+    })).catch(guard(fail));
   }
 
   /* ---------------- Shared masters ---------------- */
   function renderMasters() {
-    var tab = document.getElementById("tab");
-    tab.innerHTML = '<div class="card"><p class="muted">Loading…</p></div>';
-    api("masters").then(function (j) {
+    loading();
+    api("masters").then(guard(function (j) {
       var rep = j.report, part = function (k, label) {
         var p = rep && rep[k];
         if (!p) return '';
@@ -241,19 +564,19 @@
           (p.conflicts.length ? '<pre>' + esc(p.conflicts.join("\n")) + '</pre>' : '');
       };
       var modeText = { report: "Report only: nothing is changed yet. Review the numbers below, then turn sync on.", on: "On: changes in either portal are copied to the other every few seconds.", off: "Off: the portals' candidates and clients are not kept in sync." }[j.mode];
-      tab.innerHTML = '<div class="card"><b>Shared candidates &amp; clients</b><p class="muted">' + modeText + '</p><div class="row">' +
+      tabEl().innerHTML = '<div class="card"><b>Shared candidates &amp; clients</b><p class="muted">' + modeText + '</p><div class="row">' +
         (j.mode !== "on" ? '<button class="primary" data-m="on">Turn sync on</button>' : '<button data-m="off">Pause sync</button>') +
         (j.mode !== "report" ? '<button data-m="report">Report only</button>' : '') + '<button id="run">Check now</button></div>' +
         (rep ? '<p class="muted">Last check: ' + esc(new Date(rep.at).toLocaleString()) + (rep.applied ? " (applied)" : " (report)") + '</p>' + part("candidate", "Candidates") + part("client", "Clients") +
           (rep.errors.length ? '<h3>Problems</h3><pre>' + esc(rep.errors.join("\n")) + '</pre>' : '') : '<p class="muted">No check has run yet.</p>') + '</div>';
-      Array.prototype.forEach.call(tab.querySelectorAll("[data-m]"), function (b) {
+      Array.prototype.forEach.call(tabEl().querySelectorAll("[data-m]"), function (b) {
         b.onclick = function () {
           if (b.dataset.m === "on" && !confirm("Turn on sync? Missing candidates and clients are added to the other portal and renames are copied both ways.")) return;
           api("masters", { mode: b.dataset.m }).then(renderMasters).catch(function (e) { alert(e.message); });
         };
       });
       document.getElementById("run").onclick = function () { this.disabled = true; this.textContent = "Checking…"; api("masters", { run: true }).then(renderMasters).catch(function (e) { alert(e.message); renderMasters(); }); };
-    }).catch(function (e) { tab.innerHTML = '<div class="card err">' + esc(e.message) + '</div>'; });
+    })).catch(guard(fail));
   }
 
   boot();

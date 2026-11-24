@@ -61,7 +61,9 @@ function createAuth({ supabaseUrl, serviceKey, anonKey, secret, rest, log }) {
   /* ---------------- app_users ---------------- */
   async function loadUsers(force) {
     if (!force && users && Date.now() - usersAt < 15000) return users;
-    const rows = await rest("GET", "app_users?select=email,name,role,portals,active,updated_by,updated_at&order=email");
+    const cols = "email,name,role,portals,active,updated_by,updated_at";
+    // last_login_at arrives with migration 6; keep working on a database without it
+    const rows = await rest("GET", "app_users?select=" + cols + ",last_login_at&order=email").catch(() => rest("GET", "app_users?select=" + cols + "&order=email"));
     users = new Map(rows.map(u => [u.email, u]));
     usersAt = Date.now();
     return users;
@@ -97,7 +99,7 @@ function createAuth({ supabaseUrl, serviceKey, anonKey, secret, rest, log }) {
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw httpError(400, "Enter a valid email");
     const role = ROLES.includes(input.role) ? input.role : "user";
     const portals = (Array.isArray(input.portals) ? input.portals : []).filter(p => PORTALS.includes(p));
-    if (role !== "super_admin" && !portals.length) throw httpError(400, "Choose at least one portal");
+    if (role !== "super_admin" && !portals.length && input.active !== false) throw httpError(400, "Choose at least one portal");
     const all = await loadUsers(true);
     const existing = all.get(email) || null;
     const next = { email, role, portals, active: input.active !== false };

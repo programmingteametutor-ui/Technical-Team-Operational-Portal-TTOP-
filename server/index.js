@@ -250,6 +250,7 @@ async function editorEdit(body, user) {
   await r.persisted;
   const triggerResults = [];
   if (editInfo) {
+    await adapter.loadTriggers(store).catch(() => {});
     for (const t of runtime.editTriggerTargets(wb.id)) {
       const tr = await runtime.run(t.project, null, null, {
         activeUserEmail: user.email,
@@ -415,7 +416,9 @@ const { createTtop } = require("./app/ttop");
 const { createDhruvaSso } = require("./app/dhruva");
 const { createMasters } = require("./app/masters");
 const rest = (method, p, body, headers) => adapter.req(method, p, body, headers);
-let auth = null, masters = null;
+let auth = null, masters = null, admin = null;
+const { createAdmin } = require("./app/admin");
+const CSV_JS = "window.parseCsv = " + require("./app/csvimport").parseCsv.toString() + ";";
 const ttop = createTtop({ root: ROOT, log });
 const sso = createDhruvaSso({ runtime, store });
 const SECURE_COOKIE = /^https:/i.test(PUBLIC_URL);
@@ -444,6 +447,7 @@ async function appApi(req, res, sub) {
     const u = await auth.getUser(email);
     if (!u) return sendJson(res, 403, { ok: false, error: "Not set up in the portal" });
     res.setHeader("Set-Cookie", auth.makeCookie(email, SECURE_COOKIE));
+    rest("PATCH", "app_users?email=eq." + encodeURIComponent(email), { last_login_at: new Date().toISOString() }, { Prefer: "return=minimal" }).catch(() => {});
     const t = masters.tickIfStale(120000); if (t) await t;
     return sendJson(res, 200, { ok: true, user: publicUser(u) });
   }
@@ -467,13 +471,42 @@ async function appApi(req, res, sub) {
           .map(u => {
             const d = sso.dhruvaRoles(u.email);
             const problem = d.known && d.active && auth.canOpen(u, "dhruva") ? sso.ceilingProblem(u, d) : null;
-            return Object.assign(publicUser(u), { active: u.active, canEdit: auth.mayManage(me, u, u), dhruva: { known: d.known, active: d.active, roles: d.roles, problem } });
+            return Object.assign(publicUser(u), { active: u.active, lastLogin: u.last_login_at || null, canEdit: auth.mayManage(me, u, u), dhruva: { known: d.known, active: d.active, roles: d.roles, problem } });
           });
         return sendJson(res, 200, { ok: true, users: list });
       }
       if (req.method === "POST") { const u = await auth.saveUser(me, await readJson(req)); return sendJson(res, 200, { ok: true, user: publicUser(u) }); }
       if (req.method === "DELETE") { await auth.deleteUser(me, new URL(req.url, "http://x").searchParams.get("email")); return sendJson(res, 200, { ok: true }); }
     } catch (e) { return sendJson(res, e.status || 500, { ok: false, error: e.message }); }
+  }
+  if (sub === "signups") {
+    if (me.role === "user") return sendJson(res, 403, { ok: false, error: "Not allowed" });
+    return sendJson(res, 200, { ok: true, signups: await admin.pendingSignups() });
+  }
+  if (sub === "overview" || sub === "import" || sub === "dhruva-setup") {
+    if (me.role !== "super_admin") return sendJson(res, 403, { ok: false, error: "Super admins only" });
+    try {
+      if (sub === "overview") return sendJson(res, 200, Object.assign({ ok: true }, await admin.overview()));
+      if (sub === "import") {
+        if (req.method === "GET") return sendJson(res, 200, { ok: true, targets: admin.importTargets(), data: await admin.dataStatus() });
+        const b = await readJson(req);
+        if (b.action === "chunk") return sendJson(res, 200, await admin.importChunk(b));
+        if (b.action === "apply") {
+          const out = await admin.importApply(b, me);
+          if (/^V2 User (Access|Roles)$/.test(out.tab)) await seedDhruvaUsers().catch(e => log.error("[import] adding Dhruva users: " + e.message));
+          return sendJson(res, 200, out);
+        }
+        return sendJson(res, 400, { ok: false, error: "Unknown action" });
+      }
+      if (req.method === "GET") return sendJson(res, 200, Object.assign({ ok: true, properties: admin.listProperties() }, admin.setupStatus()));
+      const b = await readJson(req);
+      if (b.action === "run") return sendJson(res, 200, await admin.runSetup(me));
+      if (b.action === "set") return sendJson(res, 200, await admin.setProperty(b, me));
+      return sendJson(res, 400, { ok: false, error: "Unknown action" });
+    } catch (e) {
+      if (!e.status) log.error("[admin] " + sub + ": " + (e.stack || e));
+      return sendJson(res, e.status || 500, { ok: false, error: e.message });
+    }
   }
   if (sub === "masters") {
     if (me.role !== "super_admin") return sendJson(res, 403, { ok: false, error: "Super admins only" });
@@ -489,14 +522,31 @@ async function appApi(req, res, sub) {
 }
 function publicUser(u) { return { email: u.email, name: u.name || "", role: u.role, portals: u.role === "super_admin" ? ["ttop", "dhruva"] : (u.portals || []) }; }
 
-/** First start: add Dhruva's active users to app_users (merged with TTOP's). */
+/** SUPER_ADMIN_EMAILS: people who are always super admins (needed on a new, empty database). */
+async function ensureSuperAdmins() {
+  const want = String(process.env.SUPER_ADMIN_EMAILS || "").toLowerCase().split(",").map(s => s.trim()).filter(e => /^[^@\s]+@[^@\s]+$/.test(e));
+  if (!want.length) return;
+  const all = await auth.loadUsers(true);
+  const rows = want.filter(e => !all.has(e) || all.get(e).role !== "super_admin" || !all.get(e).active)
+    .map(e => ({ email: e, name: (all.get(e) && all.get(e).name) || null, role: "super_admin", portals: ["ttop", "dhruva"], active: true, updated_by: "SUPER_ADMIN_EMAILS" }));
+  if (!rows.length) return;
+  await rest("POST", "app_users?on_conflict=email", rows, { Prefer: "resolution=merge-duplicates,return=minimal" });
+  await auth.loadUsers(true);
+  log.log("[boot] super admins from SUPER_ADMIN_EMAILS: " + rows.map(r => r.email).join(", "));
+}
+
+/** First start with Dhruva data: add Dhruva's active users to app_users (merged with TTOP's). */
 async function seedDhruvaUsers() {
   const done = await rest("GET", "app_state?key=eq.dhruva_users_seeded&select=value");
   if (done.length) return;
+  const dUsers = sso.dhruvaUsers();
+  const pb = store.workbook("1Q5pRPoLsSjfxuRfEUZW2zZqrURYPzzbbPO6_8r9CLCk");
+  const rolesTab = pb && pb.sheets.find(x => x.name === "V2 User Roles");
+  if (!dUsers.length || !rolesTab || rolesTab.lastRow() < 2) return;   // Dhruva user tabs not there yet (e.g. mid CSV import): try again later
   const all = await auth.loadUsers(true);
   const rank = { user: 1, admin: 2, super_admin: 3 };
   const rows = [];
-  for (const d of sso.dhruvaUsers()) {
+  for (const d of dUsers) {
     const mapped = d.roles.includes("SUPER_ADMIN") ? "super_admin" : d.roles.includes("ADMIN") ? "admin" : "user";
     const ex = all.get(d.email);
     const role = ex && rank[ex.role] > rank[mapped] ? ex.role : mapped;
@@ -516,6 +566,7 @@ async function handle(req, res) {
     if (p === "/gas-client.js") { res.writeHead(200, { "Content-Type": "application/javascript; charset=utf-8", "Cache-Control": "no-cache" }); return res.end(GAS_CLIENT); }
     // home page
     if (p === "/" && req.method === "GET") return sendHtml(res, 200, fs.readFileSync(path.join(ROOT, "public", "app.html"), "utf8"));
+    if (p === "/app/csv.js") { res.writeHead(200, { "Content-Type": "application/javascript; charset=utf-8", "Cache-Control": "no-cache" }); return res.end(CSV_JS); }
     if (p === "/app/cron") {
       const want = process.env.CRON_SECRET;
       if (!want || String(req.headers.authorization || "") !== "Bearer " + want) return sendJson(res, 401, { ok: false, error: "Unauthorized" });
@@ -567,8 +618,10 @@ async function init() {
   for (const [id, w] of Object.entries(CONFIG.workbooks)) if (!store.workbook(id)) log.warn("[boot] workbook " + w.title + " (" + id + ") has no data yet - run the Dhruva export first");
   portalAllowList = computeAllowList();
   log.log("[boot] loaded " + store.workbooks.size + " Dhruva workbooks" + (info ? " (" + info.sheets + " tabs, " + info.rows + " rows)" : "") + " in " + (Date.now() - t0) + " ms; Dhruva portal exposes " + portalAllowList.size + " functions");
+  await ensureSuperAdmins().catch(e => log.error("[boot] SUPER_ADMIN_EMAILS: " + e.message));
   await seedDhruvaUsers().catch(e => log.error("[boot] could not add Dhruva users to app_users: " + e.message));
   masters = createMasters({ runtime, store, rest, log });
+  admin = createAdmin({ runtime, store, rest, log });
   runtime.afterCommit = (changes) => masters.onDhruvaChanges(changes);
 }
 /** Local / VM mode (`npm start`): listen and run the once-a-minute work in-process. */
