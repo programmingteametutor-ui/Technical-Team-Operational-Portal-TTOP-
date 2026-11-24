@@ -273,7 +273,7 @@
 
       h += '<div class="kpis">' +
         kpi(nf(C.today), "TTOP interviews today", nf(C.today_done) + " completed") +
-        kpi(nf(pune.calls.recorded + hyd.calls.recorded), "Dhruva calls updated today", "Pune " + pune.calls.recorded + " · HYD " + hyd.calls.recorded) +
+        kpi(nf(pune.calls.recorded + hyd.calls.recorded), "Dhruva calls updated today", "Pradeep " + pune.calls.recorded + " · HYD " + hyd.calls.recorded) +
         kpi(nf(dPending + (C.import_review || 0)), "Waiting for review", "Dhruva requests " + dPending + " · TTOP import " + nf(C.import_review || 0), dPending + (C.import_review || 0) ? "warn" : "") +
         kpi(rs((C.incentive_month_amt || 0) + pune.incentives.monthAmount + hyd.incentives.monthAmount), "Incentives this month", "TTOP " + rs(C.incentive_month_amt) + " · Dhruva " + rs(pune.incentives.monthAmount + hyd.incentives.monthAmount)) +
         kpi(nf(C.placed_month), "Placed this month", nf(C.closers_month || 0) + " closers · " + nf(C.expected_open || 0) + " expected") +
@@ -288,17 +288,17 @@
         '<div class="ch" style="margin-top:14px"><b>Interviews per day</b><span class="muted">last 14 days</span></div>' + bars(T.by_day) + '</div>';
 
       var callRows = function (team, c) { return c.today.map(function (x) { return '<tr><td>' + team + '</td><td>' + esc(x.text.split(" – ").slice(0, 2).join(" – ")) + '</td><td>' + esc(x.handler) + '</td><td><span class="st st-' + esc(x.status.toLowerCase()) + '">' + esc(x.status) + '</span></td></tr>'; }).join(""); };
-      var allCalls = callRows("Pune", pune.calls) + callRows("HYD", hyd.calls);
+      var allCalls = callRows("Pradeep", pune.calls) + callRows("HYD", hyd.calls);
       h += '<div class="card"><div class="ch"><b>Dhruva — calls updated today</b><span class="muted">' + ["Completed", "Rescheduled", "Cancelled"].map(function (s) { return s + " " + ((pune.calls.byStatus[s] || 0) + (hyd.calls.byStatus[s] || 0)); }).join(" · ") + '</span></div>' +
         (allCalls ? '<div class="scroll"><table class="compact"><thead><tr><th>Team</th><th>Call</th><th>Handler</th><th>Status</th></tr></thead><tbody>' + allCalls + '</tbody></table></div>' : '<p class="muted">No call outcomes recorded today yet.</p>') +
-        '<div class="ch" style="margin-top:14px"><b>Waiting for review in Dhruva</b></div><table class="compact"><thead><tr><th></th><th class="num">Pune</th><th class="num">HYD</th></tr></thead><tbody>' +
+        '<div class="ch" style="margin-top:14px"><b>Waiting for review in Dhruva</b></div><table class="compact"><thead><tr><th></th><th class="num">Pradeep</th><th class="num">HYD</th></tr></thead><tbody>' +
         Object.keys(Object.assign({}, pune.pending, hyd.pending)).map(function (k) { return '<tr><td>' + esc(k) + '</td><td class="num">' + nf(pune.pending[k]) + '</td><td class="num">' + nf(hyd.pending[k]) + '</td></tr>'; }).join("") +
         '<tr><td>Recovery exceptions</td><td class="num">' + nf(pune.recoveryExceptions) + '</td><td class="num">' + nf(hyd.recoveryExceptions) + '</td></tr></tbody></table></div></div>';
 
       // Incentives
       h += '<div class="grid3"><div class="card"><div class="ch"><b>TTOP incentives</b></div><div class="mini">' +
         '<div><b>' + rs(C.incentive_month_amt) + '</b>this month</div><div><b>' + rs(C.incentive_pending_amt) + '</b>pending (' + nf(C.incentive_pending) + ')</div><div><b>' + nf(C.candidates) + '</b>active candidates</div><div><b>' + nf(C.clients) + '</b>clients</div></div></div>' +
-        '<div class="card"><div class="ch"><b>Dhruva Pune — this month</b><span class="muted">' + rs(pune.incentives.monthAmount) + ' · ' + nf(pune.incentives.monthCount) + ' entries</span></div>' + handlerTable(pune.incentives.byHandler) + '</div>' +
+        '<div class="card"><div class="ch"><b>Dhruva Pradeep Anna Team — this month</b><span class="muted">' + rs(pune.incentives.monthAmount) + ' · ' + nf(pune.incentives.monthCount) + ' entries</span></div>' + handlerTable(pune.incentives.byHandler) + '</div>' +
         '<div class="card"><div class="ch"><b>Dhruva HYD — this month</b><span class="muted">' + rs(hyd.incentives.monthAmount) + ' · ' + nf(hyd.incentives.monthCount) + ' entries</span></div>' + handlerTable(hyd.incentives.byHandler) + '</div></div>';
 
       // Activity

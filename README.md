@@ -24,7 +24,7 @@ Super admins land on a dashboard after signing in:
 
 - **Dashboard:** one-click entry to TTOP, Dhruva and Dhruva's sheet editor;
   today's TTOP interviews and Dhruva call outcomes; requests waiting for review
-  in Dhruva (Pune and HYD) and TTOP's import review; incentives this month per
+  in Dhruva (Pradeep Anna Team and HYD) and TTOP's import review; incentives this month per
   portal and per Dhruva handler; recent activity from both portals; data and
   setup health (empty tabs, failed doc sync, people waiting for access).
 - **People:** everyone with access, their role, portals, Dhruva role and last

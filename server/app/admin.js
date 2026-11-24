@@ -109,7 +109,7 @@ function createAdmin({ runtime, store, rest, log }) {
         recoverySuggestions: count(WB.hydPrivate, "Promotion Recovery")
       },
       masters: { candidates: count(WB.control, "Candidate Master"), clients: count(WB.control, "Client Master") },
-      activity: [...actionLog(WB.punePrivate, "Portal Action Log", "Pune"), ...actionLog(WB.hydPrivate, "HYD Portal Action Log", "HYD")]
+      activity: [...actionLog(WB.punePrivate, "Portal Action Log", "Pradeep"), ...actionLog(WB.hydPrivate, "HYD Portal Action Log", "HYD")]
         .sort((a, b) => b.at - a.at).slice(0, 12),
       data: await dataStatus()
     };
