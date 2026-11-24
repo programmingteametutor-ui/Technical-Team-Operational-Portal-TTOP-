@@ -74,7 +74,7 @@ The simplest route is to deploy this folder **to TTOP's existing Vercel
 project** (replace the repository contents). Its address, environment
 variables and TTOP's Supabase schedules then stay as they are.
 
-1. **Database:** Supabase → SQL Editor, run the six files in
+1. **Database:** Supabase → SQL Editor, run the seven files in
    `supabase/migrations/` in order. They only add tables (`gs_*` for Dhruva,
    `app_*` for the combined app), functions and triggers; no TTOP table or
    function is changed. File 4 copies TTOP's current users into the People list.
