@@ -19,7 +19,7 @@ Nothing in this phase changes code or the database. Phase 2 starts after the ope
 | `resolve_recipient()` | Safe | Full name, else first name only when exactly one member has it; otherwise `recipient_member_id` stays null. Call Pilots incentive visibility will use `recipient_member_id`, so ambiguous rows go to nobody but admins (listed as "unassigned"). |
 | Parsers to copy | Yes | `bpParse`/`bpp`/`bpFile` (Doc import), `tdParse`/`tdO`/`tdM`/`tdApply` (Tool Drive list), `eodT`, `suggestTD` (inside the `core` block). Only `suggestTD` is in `/* core:start */`; the others use page globals and will be rewritten as pure functions in the new page's core block. |
 | pg_cron job | Yes | `supabase/app_schedule.sql` schedules `iop-app-minute` → `/app/cron`. |
-| `portals/ttop/.claude/settings.local.json` tracked in git | Yes | Removed in Phase 5 (kept on disk, added to `.gitignore`). |
+| `portals/ttop/.claude/settings.local.json` tracked in git | **No** | It is excluded by the global gitignore; nothing to remove. |
 | TTOP tests | 83 now | 82 + `sync-doc-review.test.js` added on 2026-11-25. All must stay green. |
 | Migrations "1, 2, 3, 5, 7 only create gs_*" | Not 7 | `000007` raises the service-role statement timeout; TTOP's import also benefits. **Keep 7.** `000006` creates `app_imports`/`app_import_chunks` (Dhruva only) and the admin dashboard functions (keep those). |
 | `app_state` only for Dhruva | Yes | Used only by `masters.js` (`masters_sync`) and the Dhruva user seeding (`dhruva_users_seeded`). Drop in Step B. |
@@ -167,7 +167,7 @@ supabase/migrations/20261124000002_dhruva_views.sql
 supabase/migrations/20261124000003_dhruva_import_helpers.sql
 supabase/migrations/20261124000005_multi_instance.sql
 supabase/app_schedule.sql              (replaced by the unschedule in Step B)
-portals/ttop/.claude/settings.local.json   (untracked + .gitignore; file stays on disk)
+
 ```
 
 ### Files to KEEP (changed where noted)

@@ -99,7 +99,6 @@
 <body>
 <div id="root"></div>
 <script src="/api/config"></script>
-<script src="/app/csv.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script>
 (function () {
@@ -110,7 +109,7 @@
   function guard(fn) { var g = GEN; return function (x) { if (g === GEN) return fn(x); }; }
   var PORTALS = {
     ttop: { name: "TTOP Portal", desc: "Technical Team Operational Portal: candidates, interviews, assessments, closers and incentives.", url: "/ttop/" },
-    dhruva: { name: "Call Pilots Operations Portal", desc: "Driving interview calls for the Pradeep Anna Team and the Hyderabad team: call schedule, approvals, recovery, reports and incentives.", url: "/call-pilots/" }
+    callpilots: { name: "Call Pilots Operations Portal", desc: "Interview calls for the Pradeep Anna Team and the Hyderabad team: my calls, incentives, adding and assigning interviews.", url: "/callpilots/" }
   };
   var ROLE_LABEL = { super_admin: "Super admin", admin: "Admin", user: "User" };
   var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); };
@@ -134,12 +133,12 @@
     if (withSignOut) document.getElementById("so").onclick = signOut;
   }
 
-  // Where the person wanted to go: ?next=/call-pilots/ (sent by the server) or a TTOP alert link (/#i123).
-  // An old ?next=/dhruva/ link is sent to /call-pilots/.
+  // Where the person wanted to go: ?next=/callpilots/ (sent by the server) or a TTOP alert link (/#i123).
+  // Old ?next=/dhruva/ and /call-pilots/ links go to /callpilots/.
   function nextTarget() {
     var q = new URLSearchParams(location.search).get("next");
-    if (q && /^\/dhruva\//.test(q)) q = "/call-pilots/" + q.slice(8);
-    if (q && /^\/(ttop|call-pilots)\//.test(q)) return q;
+    if (q && /^\/(dhruva|call-pilots)\//.test(q)) q = "/callpilots/" + q.replace(/^\/(dhruva|call-pilots)\//, "");
+    if (q && /^\/(ttop|callpilots)\//.test(q)) return q;
     var h = location.hash;
     if (h && h.length > 1 && !/access_token|error=/.test(h)) return "/ttop/" + h;
     return "";
@@ -159,7 +158,7 @@
         var next = nextTarget();
         try { next = next || sessionStorage.getItem("iop_next") || ""; sessionStorage.removeItem("iop_next"); } catch (e) {}
         var allowed = j.user.portals;
-        if (next) { var p = next.split("/")[1]; if (p === "call-pilots") p = "dhruva"; if (allowed.indexOf(p) >= 0) return openPortal(p, next); }
+        if (next) { var p = next.split("/")[1]; if (allowed.indexOf(p) >= 0) return openPortal(p, next); }
         if (allowed.length === 1 && j.user.role === "user") return openPortal(allowed[0]);
         render();
       }).catch(function (e) {
@@ -177,20 +176,13 @@
   }
 
   function openPortal(p, url) {
-    if (p === "dhruva") {
-      var cur = ""; try { cur = localStorage.getItem("interview_portal_session") || ""; } catch (e) {}
-      return api("dhruva-session", { current: cur }).then(function (j) {
-        try { localStorage.setItem("interview_portal_session", j.token); } catch (e) {}
-        location.href = url || PORTALS.dhruva.url;
-      }).catch(function (e) { alert(e.message); render(); });
-    }
     location.href = url || PORTALS[p].url;
   }
 
   function render() {
     var canManage = ME.role === "super_admin" || ME.role === "admin";
     var tabs = ME.role === "super_admin"
-      ? [["dash", "Dashboard"], ["people", "People"], ["data", "Data import"], ["setup", "Call Pilots setup"], ["masters", "Shared candidates &amp; clients"]]
+      ? [["dash", "Dashboard"], ["people", "People"]]
       : canManage ? [["home", "Portals"], ["people", "People"]] : [];
     GEN++;
     if (!tabs.some(function (t) { return t[0] === TAB; })) TAB = tabs.length ? tabs[0][0] : "home";
@@ -201,7 +193,7 @@
     document.getElementById("so").onclick = signOut;
     Array.prototype.forEach.call(document.querySelectorAll(".tabs button"), function (b) { b.onclick = function () { TAB = b.dataset.t; render(); }; });
     if (canManage) api("signups").then(function (j) { var b = document.getElementById("b_people"); if (b && j.signups.length) b.textContent = j.signups.length; }).catch(function () {});
-    ({ dash: renderDash, people: renderAccess, data: renderData, setup: renderSetup, masters: renderMasters }[TAB] || renderHome)();
+    ({ dash: renderDash, people: renderAccess }[TAB] || renderHome)();
   }
   function tabEl() { return document.getElementById("tab"); }
   function loading() { tabEl().innerHTML = '<div class="card"><p class="muted">Loading…</p></div>'; }
@@ -225,7 +217,7 @@
       t += '<div class="tile' + (ok ? "" : " off") + '"><h2>' + P.name + '</h2><p>' + P.desc + '</p>' +
         (ok ? '<span class="role">You: ' + ROLE_LABEL[ME.role] + '</span><button class="primary" data-p="' + k + '">Open ' + P.name + '</button>' : '<span class="role">No access</span>') + '</div>';
     });
-    t += '</div><p class="muted">Candidates and clients are shared: a change in one portal shows in the other. Interviews and incentives stay with each portal.</p>';
+    t += '</div><p class="muted">Both portals use the same candidates, clients, interviews and incentives.</p>';
     tabEl().innerHTML = t;
     bindOpen();
   }
@@ -256,28 +248,30 @@
 
   function renderDash() {
     loading();
-    Promise.all([api("overview"), api("dhruva-setup").catch(function () { return null; })]).then(guard(function (r) {
-      var j = r[0], setup = r[1], T = j.ttop || {}, C = T.counts || {}, D = j.dhruva, U = j.users || {};
-      var pune = D.pune, hyd = D.hyd;
-      var dhruvaEmpty = D.data.every(function (w) { return !w.rows; });
+    api("overview").then(guard(function (j) {
+      var T = j.ttop || {}, C = T.counts || {}, U = j.users || {}, P = j.callpilots || { teams: [], activity: [] };
+      var teams = P.teams || [];
+      var tsum = function (f) { return teams.reduce(function (a, t) { return a + (f(t) || 0); }, 0); };
+      var cpToday = tsum(function (t) { return t.calls.total; }), cpDone = tsum(function (t) { return (t.calls.byStatus || {}).Completed; });
+      var cpResched = tsum(function (t) { return t.calls.rescheduleRequests; }), cpStale = tsum(function (t) { return t.calls.notUpdated; });
+      var cpAmt = tsum(function (t) { return Number(t.incentives.monthAmount); });
       var alerts = [];
-      if (dhruvaEmpty) alerts.push('Call Pilots has no sheet data yet. <a href="#" data-go="data">Import the CSV files</a>.');
-      else { var empties = D.data.reduce(function (a, w) { return a + w.empty; }, 0); if (empties) alerts.push(empties + ' Call Pilots tab' + (empties === 1 ? " is" : "s are") + ' empty. <a href="#" data-go="data">See Data import</a>.'); }
-      if (setup && !setup.ready) alerts.push('Call Pilots setup is incomplete (bridges or edit triggers). <a href="#" data-go="setup">Finish setup</a>.');
       if (U.pending) alerts.push(U.pending + ' person' + (U.pending === 1 ? " is" : "s are") + ' waiting for access. <a href="#" data-go="people">Review</a>.');
       if (j.ttopError) alerts.push('TTOP figures unavailable: ' + esc(j.ttopError) + ' (run migration 6).');
+      if (j.callpilotsError) alerts.push('Call Pilots figures unavailable: ' + esc(j.callpilotsError) + ' (run migration 20261125000001_callpilots.sql).');
+      else if (!teams.length) alerts.push('No Call Pilots handlers yet. Mark team members as Call Pilots handlers (cp_set_member).');
+      if (P.unmatchedToolDrive) alerts.push(P.unmatchedToolDrive + ' Tool Drive name' + (P.unmatchedToolDrive === 1 ? "" : "s") + ' in the last 60 days could not be matched to one person (two people share a first name, or the name is unknown).');
       if (T.last_sync && !T.last_sync.ok) alerts.push('Last TTOP doc sync failed ' + when(T.last_sync.ran_at) + ': ' + esc(T.last_sync.error || T.last_sync.message || "") + '.');
 
-      var dPending = sum(pune.pending) + sum(hyd.pending);
-      var h = '<div class="quick"><button class="primary" data-p="ttop">Open TTOP</button><button class="primary" data-p="dhruva">Open Call Pilots</button>' +
-        '<button data-p="dhruva" data-url="/sheets">Call Pilots sheet editor</button><span class="sp"></span><span class="muted">' + esc(new Date(j.generatedAt).toLocaleString(undefined, { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })) + '</span><button id="refresh">Refresh</button></div>';
+      var h = '<div class="quick"><button class="primary" data-p="ttop">Open TTOP</button><button class="primary" data-p="callpilots">Open Call Pilots</button>' +
+        '<span class="sp"></span><span class="muted">' + esc(new Date(j.generatedAt).toLocaleString(undefined, { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })) + '</span><button id="refresh">Refresh</button></div>';
       if (alerts.length) h += '<div class="alerts">' + alerts.map(function (a) { return '<div>' + a + '</div>'; }).join("") + '</div>';
 
       h += '<div class="kpis">' +
         kpi(nf(C.today), "TTOP interviews today", nf(C.today_done) + " completed") +
-        kpi(nf(pune.calls.recorded + hyd.calls.recorded), "Call Pilots calls updated today", "Pradeep " + pune.calls.recorded + " · HYD " + hyd.calls.recorded) +
-        kpi(nf(dPending + (C.import_review || 0)), "Waiting for review", "Call Pilots requests " + dPending + " · TTOP import " + nf(C.import_review || 0), dPending + (C.import_review || 0) ? "warn" : "") +
-        kpi(rs((C.incentive_month_amt || 0) + pune.incentives.monthAmount + hyd.incentives.monthAmount), "Incentives this month", "TTOP " + rs(C.incentive_month_amt) + " · Call Pilots " + rs(pune.incentives.monthAmount + hyd.incentives.monthAmount)) +
+        kpi(nf(cpToday), "Call Pilots calls today", nf(cpDone) + " completed · " + teams.map(function (t) { return esc(t.team) + " " + nf(t.calls.total); }).join(" · ")) +
+        kpi(nf(cpResched + cpStale + (C.import_review || 0)), "Waiting for action", nf(cpResched) + " reschedule requests · " + nf(cpStale) + " calls not updated · TTOP import " + nf(C.import_review || 0), cpResched + cpStale + (C.import_review || 0) ? "warn" : "") +
+        kpi(rs(C.incentive_month_amt || 0), "Incentives this month", "Call Pilots handlers " + rs(cpAmt) + " (part of the TTOP total)") +
         kpi(nf(C.placed_month), "Placed this month", nf(C.closers_month || 0) + " closers · " + nf(C.expected_open || 0) + " expected") +
         kpi(nf(U.total), "People with access", nf(U.activeWeek) + " signed in this week") + '</div>';
 
@@ -289,33 +283,36 @@
         }).join("") + '</tbody></table></div>' : '<p class="muted">No interviews today.</p>') +
         '<div class="ch" style="margin-top:14px"><b>Interviews per day</b><span class="muted">last 14 days</span></div>' + bars(T.by_day) + '</div>';
 
-      var callRows = function (team, c) { return c.today.map(function (x) { return '<tr><td>' + team + '</td><td>' + esc(x.text.split(" – ").slice(0, 2).join(" – ")) + '</td><td>' + esc(x.handler) + '</td><td><span class="st st-' + esc(x.status.toLowerCase()) + '">' + esc(x.status) + '</span></td></tr>'; }).join(""); };
-      var allCalls = callRows("Pradeep", pune.calls) + callRows("HYD", hyd.calls);
-      h += '<div class="card"><div class="ch"><b>Call Pilots — calls updated today</b><span class="muted">' + ["Completed", "Rescheduled", "Cancelled"].map(function (s) { return s + " " + ((pune.calls.byStatus[s] || 0) + (hyd.calls.byStatus[s] || 0)); }).join(" · ") + '</span></div>' +
-        (allCalls ? '<div class="scroll"><table class="compact"><thead><tr><th>Team</th><th>Call</th><th>Handler</th><th>Status</th></tr></thead><tbody>' + allCalls + '</tbody></table></div>' : '<p class="muted">No call outcomes recorded today yet.</p>') +
-        '<div class="ch" style="margin-top:14px"><b>Waiting for review in Call Pilots</b></div><table class="compact"><thead><tr><th></th><th class="num">Pradeep</th><th class="num">HYD</th></tr></thead><tbody>' +
-        Object.keys(Object.assign({}, pune.pending, hyd.pending)).map(function (k) { return '<tr><td>' + esc(k) + '</td><td class="num">' + nf(pune.pending[k]) + '</td><td class="num">' + nf(hyd.pending[k]) + '</td></tr>'; }).join("") +
-        '<tr><td>Recovery exceptions</td><td class="num">' + nf(pune.recoveryExceptions) + '</td><td class="num">' + nf(hyd.recoveryExceptions) + '</td></tr></tbody></table></div></div>';
+      var allCalls = teams.map(function (t) {
+        return (t.calls.today || []).map(function (x) {
+          return '<tr><td>' + esc(t.team) + '</td><td class="num">' + esc(x.time || "") + '</td><td><b>' + esc(x.candidate) + '</b><div class="muted">' + esc(x.client) + ' · ' + esc(x.round) + '</div></td><td>' + esc(x.handler) + '</td><td><span class="st st-' + esc(String(x.status).toLowerCase()) + '">' + esc(x.status) + '</span></td></tr>';
+        }).join("");
+      }).join("");
+      h += '<div class="card"><div class="ch"><b>Call Pilots — today\'s calls</b><span class="muted">' + ["Completed", "Scheduled", "Cancelled"].map(function (s) { return s + " " + tsum(function (t) { return (t.calls.byStatus || {})[s]; }); }).join(" · ") + '</span></div>' +
+        (allCalls ? '<div class="scroll"><table class="compact"><thead><tr><th>Team</th><th>Time</th><th>Call</th><th>Handler</th><th>Status</th></tr></thead><tbody>' + allCalls + '</tbody></table></div>' : '<p class="muted">No calls on today\'s list.</p>') +
+        '<div class="ch" style="margin-top:14px"><b>Needs action in Call Pilots</b></div><table class="compact"><thead><tr><th></th>' + teams.map(function (t) { return '<th class="num">' + esc(t.team) + '</th>'; }).join("") + '</tr></thead><tbody>' +
+        '<tr><td>Reschedule requests</td>' + teams.map(function (t) { return '<td class="num">' + nf(t.calls.rescheduleRequests) + '</td>'; }).join("") + '</tr>' +
+        '<tr><td>Past calls not updated (30 days)</td>' + teams.map(function (t) { return '<td class="num">' + nf(t.calls.notUpdated) + '</td>'; }).join("") + '</tr>' +
+        '</tbody></table></div></div>';
 
       // Incentives
       h += '<div class="grid3"><div class="card"><div class="ch"><b>TTOP incentives</b></div><div class="mini">' +
         '<div><b>' + rs(C.incentive_month_amt) + '</b>this month</div><div><b>' + rs(C.incentive_pending_amt) + '</b>pending (' + nf(C.incentive_pending) + ')</div><div><b>' + nf(C.candidates) + '</b>active candidates</div><div><b>' + nf(C.clients) + '</b>clients</div></div></div>' +
-        '<div class="card"><div class="ch"><b>Call Pilots Pradeep Anna Team — this month</b><span class="muted">' + rs(pune.incentives.monthAmount) + ' · ' + nf(pune.incentives.monthCount) + ' entries</span></div>' + handlerTable(pune.incentives.byHandler) + '</div>' +
-        '<div class="card"><div class="ch"><b>Call Pilots HYD — this month</b><span class="muted">' + rs(hyd.incentives.monthAmount) + ' · ' + nf(hyd.incentives.monthCount) + ' entries</span></div>' + handlerTable(hyd.incentives.byHandler) + '</div></div>';
+        teams.map(function (t) {
+          return '<div class="card"><div class="ch"><b>Call Pilots ' + esc(t.team) + ' — this month</b><span class="muted">' + rs(t.incentives.monthAmount) + ' · ' + nf(t.incentives.monthCount) + ' entries · ' + nf(t.handlers) + ' handlers</span></div>' + handlerTable(t.incentives.byHandler) + '</div>';
+        }).join("") + '</div>';
 
       // Activity
       var act = (T.activity || []).map(function (a) { return { at: a.at, src: "TTOP", who: a.who, what: a.action + (a.entity ? " · " + a.entity : "") }; })
-        .concat(D.activity.map(function (a) { return { at: a.at, src: "Call Pilots " + a.team, who: a.who, what: a.action + (a.detail ? " · " + a.detail : "") }; }))
+        .concat((P.activity || []).map(function (a) { return { at: a.at, src: "Call Pilots", who: a.who, what: a.action }; }))
         .sort(function (a, b) { return new Date(b.at) - new Date(a.at); }).slice(0, 15);
       h += '<div class="grid2"><div class="card"><div class="ch"><b>Recent activity</b><span class="muted">both portals</span></div>' + (act.length ? '<table class="compact"><tbody>' + act.map(function (a) {
         return '<tr><td class="muted nowrap">' + when(a.at) + '</td><td><span class="pill">' + esc(a.src) + '</span></td><td>' + esc(a.what).slice(0, 160) + '<div class="muted">' + esc(a.who || "") + '</div></td></tr>';
       }).join("") + '</tbody></table>' : '<p class="muted">No activity yet.</p>') + '</div>';
       h += '<div class="card"><div class="ch"><b>System</b></div><table class="compact"><tbody>' +
         '<tr><td>People</td><td>' + nf(U.superAdmins) + ' super admins · ' + nf(U.admins) + ' admins · ' + nf(U.users) + ' users</td></tr>' +
-        '<tr><td>Shared masters (Call Pilots)</td><td>' + nf(D.masters.candidates) + ' candidates · ' + nf(D.masters.clients) + ' clients</td></tr>' +
+        '<tr><td>Call Pilots handlers</td><td>' + (teams.length ? teams.map(function (t) { return esc(t.team) + " " + nf(t.handlers); }).join(" · ") : '<span class="muted">none yet</span>') + '</td></tr>' +
         '<tr><td>TTOP doc sync</td><td>' + (T.last_sync ? (T.last_sync.ok ? "OK " : '<span class="err">Failed</span> ') + when(T.last_sync.ran_at) + ' · ' + nf(T.last_sync.added) + ' added, ' + nf(T.last_sync.updated) + ' updated' : '<span class="muted">no runs yet</span>') + '</td></tr>' +
-        '<tr><td>Call Pilots setup</td><td>' + (setup ? (setup.ready ? "Ready" : '<a href="#" data-go="setup">Incomplete</a>') : "—") + '</td></tr>' +
-        D.data.map(function (w) { return '<tr><td>' + esc(w.title) + '</td><td>' + nf(w.rows) + ' rows in ' + w.tabs.length + ' tabs' + (w.empty ? ' · <span class="err">' + w.empty + ' empty</span>' : '') + '</td></tr>'; }).join("") +
         '</tbody></table></div></div>';
 
       tabEl().innerHTML = h;
@@ -334,14 +331,12 @@
         var q = Q.toLowerCase();
         var list = j.users.filter(function (u) { return !q || (u.email + " " + (u.name || "") + " " + u.role + " " + u.portals.join(" ")).toLowerCase().indexOf(q) >= 0; });
         document.getElementById("ulist").innerHTML = list.map(function (u) {
-          var warn = u.dhruva && u.dhruva.problem ? '<div class="pill warn" title="' + esc(u.dhruva.problem) + '">Call Pilots role mismatch</div>' : '';
-          var dh = u.dhruva && u.dhruva.known ? esc(u.dhruva.roles.join(", ") || "—") + (u.dhruva.active ? "" : " (inactive)") : '<span class="muted">not in Call Pilots</span>';
           return '<tr><td><b>' + esc(u.name || "") + '</b><div class="muted">' + esc(u.email) + '</div></td>' +
             '<td><span class="pill ' + u.role + '">' + ROLE_LABEL[u.role] + '</span>' + (u.active ? "" : ' <span class="pill warn">blocked</span>') + '</td>' +
             '<td>' + (u.portals.length ? u.portals.map(function (p) { return '<span class="pill">' + (p === "ttop" ? "TTOP" : "Call Pilots") + '</span>'; }).join("") : '<span class="muted">none</span>') + '</td>' +
-            '<td>' + dh + warn + '</td><td class="muted nowrap">' + when(u.lastLogin) + '</td>' +
+            '<td class="muted nowrap">' + when(u.lastLogin) + '</td>' +
             '<td>' + (u.canEdit ? '<button data-e="' + esc(u.email) + '">Edit</button>' : '') + '</td></tr>';
-        }).join("") || '<tr><td colspan="6" class="muted">No match.</td></tr>';
+        }).join("") || '<tr><td colspan="5" class="muted">No match.</td></tr>';
         Array.prototype.forEach.call(tabEl().querySelectorAll("[data-e]"), function (b) { b.onclick = function () { editUser(j.users.find(function (u) { return u.email === b.dataset.e; })); }; });
       };
       var roles = { super_admin: 0, admin: 0, user: 0 }, blocked = 0;
@@ -353,11 +348,11 @@
       }).join("") + '</tbody></table></div>';
       h += '<div class="card"><div class="row" style="justify-content:space-between"><div><b>People and access</b><div class="muted">' +
         (ME.role === "super_admin" ? "Super admins open both portals. Admins and users open the portals ticked for them." : "You can add and change users of your portal.") +
-        ' TTOP access follows this list automatically. Roles inside Call Pilots are set in Call Pilots Administration; the role here is the ceiling.</div></div>' +
+        ' TTOP access follows this list automatically. In Call Pilots, users see their own calls and incentives; admins see everyone and add and assign interviews.</div></div>' +
         '<button class="primary" id="add">Add person</button></div>' +
         '<div class="row" style="margin-top:12px"><input type="text" id="q" placeholder="Search name, email, role, portal" style="flex:1;min-width:220px"><span class="muted">' +
         roles.super_admin + ' super admins · ' + roles.admin + ' admins · ' + roles.user + ' users' + (blocked ? ' · ' + blocked + ' blocked' : '') + '</span></div>' +
-        '<div class="scroll tall"><table style="margin-top:8px"><thead><tr><th>Person</th><th>Role</th><th>Portals</th><th>Call Pilots role</th><th>Last sign-in</th><th></th></tr></thead><tbody id="ulist"></tbody></table></div></div>';
+        '<div class="scroll tall"><table style="margin-top:8px"><thead><tr><th>Person</th><th>Role</th><th>Portals</th><th>Last sign-in</th><th></th></tr></thead><tbody id="ulist"></tbody></table></div></div>';
       tabEl().innerHTML = h;
       draw();
       document.getElementById("q").oninput = function () { Q = this.value; draw(); };
@@ -376,7 +371,7 @@
     var isNew = !u;
     u = u || { email: (prefill && prefill.email) || "", name: (prefill && prefill.name) || "", role: "user", portals: ME.role === "admin" ? ME.portals.slice() : [], active: true };
     var roles = ME.role === "super_admin" ? ["super_admin", "admin", "user"] : ["user"];
-    var portals = ME.role === "super_admin" ? ["ttop", "dhruva"] : ME.portals;
+    var portals = ME.role === "super_admin" ? ["ttop", "callpilots"] : ME.portals;
     var d = document.createElement("dialog");
     d.innerHTML = '<h3 style="margin-top:0">' + (isNew ? (prefill ? "Give access" : "Add person") : "Edit " + esc(u.email)) + '</h3>' +
       '<label>Email</label><input type="email" id="f_email" value="' + esc(u.email) + '"' + (isNew && !prefill ? "" : " disabled") + '>' +
@@ -403,182 +398,6 @@
       if (!confirm("Remove " + u.email + " from the portal? They lose access to both portals.")) return;
       api("users?email=" + encodeURIComponent(u.email), null, "DELETE").then(function () { close(); render(); }).catch(function (e) { d.querySelector("#f_err").textContent = e.message; });
     };
-  }
-
-  /* ---------------- Data import (CSV) ---------------- */
-  var FILES = [];
-  function matchName(name, targets) {
-    var base = name.replace(/\.csv$/i, "").replace(/\s+\(\d+\)$/, "").trim(), best = null;
-    targets.forEach(function (w) {
-      var t = w.title + " - ";
-      if (base.toLowerCase().indexOf(t.toLowerCase()) === 0 && (!best || w.title.length > best.w.title.length)) best = { w: w, tab: base.slice(t.length) };
-    });
-    if (!best) return null;
-    var hit = best.w.tabs.filter(function (t) { return t.name.toLowerCase() === best.tab.toLowerCase(); })[0];
-    return { id: best.w.id, tab: hit ? hit.name : best.tab };
-  }
-  function renderData() {
-    loading();
-    api("import").then(guard(function (j) {
-      var targets = j.targets;
-      var opts = function (f) {
-        return '<select data-t="' + f.key + '"><option value="">— choose where it goes —</option>' + targets.map(function (w) {
-          return '<optgroup label="' + esc(w.title) + '">' + w.tabs.map(function (t) { var v = w.id + "|" + t.name; return '<option value="' + esc(v) + '"' + (f.target === v ? " selected" : "") + '>' + esc(t.name) + (t.rows ? " (" + nf(t.rows) + " rows now)" : " (empty)") + '</option>'; }).join("") + '</optgroup>';
-        }).join("") + '</select>';
-      };
-      var tabInfo = function (v) { if (!v) return null; var p = v.split("|"), w = targets.filter(function (x) { return x.id === p[0]; })[0]; return w && w.tabs.filter(function (t) { return t.name === p[1]; })[0]; };
-      var drawFiles = function () {
-        var box = document.getElementById("files");
-        if (!FILES.length) { box.innerHTML = ''; document.getElementById("go").disabled = true; return; }
-        box.innerHTML = '<table class="compact"><thead><tr><th>File</th><th>Rows</th><th>Goes into</th><th>Status</th></tr></thead><tbody>' + FILES.map(function (f) {
-          var t = tabInfo(f.target), warn = "";
-          if (t && t.header && f.rows[0] && t.rows) {
-            var a = t.header.slice(0, 8).map(String).join("|").trim(), b = f.rows[0].slice(0, 8).join("|").trim();
-            if (a !== b) warn = '<div class="err">Header differs from the current tab — check this is the right file.</div>';
-          }
-          if (t && !t.profiled) warn += '<div class="muted">New tab layout: values are read the way Google reads typed text.</div>';
-          return '<tr><td><b>' + esc(f.name) + '</b>' + warn + '</td><td class="num">' + nf(f.rows.length) + '</td><td>' + opts(f) + (t && t.rows ? '<div class="muted">replaces ' + nf(t.rows) + ' rows</div>' : '') + '</td><td id="st_' + f.key + '">' + (f.status || (f.target ? "Ready" : '<span class="err">Choose a tab</span>')) + '</td></tr>';
-        }).join("") + '</tbody></table>';
-        Array.prototype.forEach.call(box.querySelectorAll("select[data-t]"), function (s) { s.onchange = function () { FILES.filter(function (f) { return f.key === s.dataset.t; })[0].target = s.value; drawFiles(); }; });
-        document.getElementById("go").disabled = !FILES.some(function (f) { return f.target && !f.done; });
-      };
-      var addFiles = function (list) {
-        Array.prototype.forEach.call(list, function (file) {
-          var rd = new FileReader();
-          rd.onload = function () {
-            var rows = window.parseCsv(String(rd.result));
-            while (rows.length && rows[rows.length - 1].every(function (c) { return c === ""; })) rows.pop();
-            var m = matchName(file.name, targets);
-            FILES = FILES.filter(function (f) { return f.name !== file.name; });
-            FILES.push({ key: "f" + Math.random().toString(36).slice(2, 9), name: file.name, rows: rows, target: m ? m.id + "|" + m.tab : "" });
-            drawFiles();
-          };
-          rd.readAsText(file);
-        });
-      };
-      var dataTable = j.data.map(function (w) {
-        return '<details><summary><b>' + esc(w.title) + '</b> <span class="muted">' + nf(w.rows) + ' rows · ' + w.tabs.length + ' tabs' + (w.empty ? ' · ' + w.empty + ' empty' : '') + '</span></summary><table class="compact"><tbody>' + w.tabs.map(function (t) {
-          return '<tr><td>' + esc(t.name) + '</td><td class="num">' + (t.rows ? nf(t.rows) : t.expectEmpty ? '<span class="muted">empty in Google too</span>' : '<span class="err">empty</span>') + '</td><td class="muted">' + (t.imported ? "imported " + when(t.imported) + " by " + esc(t.by || "") : "") + '</td></tr>';
-        }).join("") + '</tbody></table></details>';
-      }).join("");
-      tabEl().innerHTML = '<div class="card"><b>Import Call Pilots sheet data from CSV</b><ol class="muted steps">' +
-        '<li>Open each Call Pilots Google Sheet and pick a tab.</li><li><b>File → Download → Comma-separated values (.csv)</b>. Google names the file “<i>Spreadsheet - Tab</i>.csv”, which is how it is matched here.</li>' +
-        '<li>Drop all the files below (as many as you like), check where each goes, then Import.</li></ol>' +
-        '<p class="muted">Each file replaces that tab completely. Dates, amounts and TRUE/FALSE are turned back into real values using the layout of each tab, so the portal logic works as in Google. Formulas come in as their values. Timestamps shown as a date only in Google arrive without the time of day.</p>' +
-        '<label class="drop" id="drop"><input type="file" id="pick" accept=".csv,text/csv" multiple hidden>Drop CSV files here or <u>choose files</u></label>' +
-        '<div id="files"></div><div class="row" style="margin-top:12px"><button class="primary" id="go" disabled>Import</button><button id="clr">Clear list</button><span class="muted" id="prog"></span></div></div>' +
-        '<div class="card"><div class="ch"><b>What is in Call Pilots now</b></div>' + dataTable + '</div>';
-      drawFiles();
-      var drop = document.getElementById("drop");
-      document.getElementById("pick").onchange = function () { addFiles(this.files); this.value = ""; };
-      drop.ondragover = function (e) { e.preventDefault(); drop.classList.add("on"); };
-      drop.ondragleave = function () { drop.classList.remove("on"); };
-      drop.ondrop = function (e) { e.preventDefault(); drop.classList.remove("on"); addFiles(e.dataTransfer.files); };
-      document.getElementById("clr").onclick = function () { FILES = []; drawFiles(); };
-      document.getElementById("go").onclick = function () {
-        var todo = FILES.filter(function (f) { return f.target && !f.done; });
-        var seen = {}, dup = todo.filter(function (f) { if (seen[f.target]) return true; seen[f.target] = 1; return false; });
-        if (dup.length) return alert("Two files are set to go into the same tab: " + dup[0].target.split("|")[1]);
-        var replacing = todo.filter(function (f) { var t = tabInfo(f.target); return t && t.rows; }).length;
-        if (replacing && !confirm(replacing + " tab(s) already hold data and will be replaced by the files. Continue?")) return;
-        var btn = this; btn.disabled = true;
-        var i = 0, okN = 0, bad = 0;
-        var setSt = function (f, html) { f.status = html; var el = document.getElementById("st_" + f.key); if (el) el.innerHTML = html; };
-        var next = function () {
-          if (i >= todo.length) { var msg = okN + " imported" + (bad ? ", " + bad + " failed" : ""); renderData(); setTimeout(function () { var el = document.getElementById("prog"); if (el) el.textContent = msg; }, 600); return; }
-          var f = todo[i++], p = f.target.split("|");
-          document.getElementById("prog").textContent = "Importing " + i + " of " + todo.length + "…";
-          setSt(f, "Uploading…");
-          uploadRows(f, p[0], p[1], function (s) { setSt(f, s); }).then(function (r) {
-            f.done = true; okN++;
-            setSt(f, '<span class="ok">✓ ' + nf(r.rows) + ' rows</span><div class="muted">' + nf(r.dates) + ' dates · ' + nf(r.numbers) + ' numbers' + (r.created ? " · new tab" : "") + '</div>');
-          }).catch(function (e) { bad++; setSt(f, '<span class="err">' + esc(e.message) + '</span>'); }).then(next);
-        };
-        next();
-      };
-    })).catch(guard(fail));
-  }
-  // Vercel accepts at most 4.5 MB per request, so big files go up in parts
-  function uploadRows(f, spreadsheetId, tab, status) {
-    var LIMIT = 2500000, parts = [], cur = [], size = 0;
-    f.rows.forEach(function (r) {
-      var s = JSON.stringify(r).length + 1;
-      if (cur.length && size + s > LIMIT) { parts.push(cur); cur = []; size = 0; }
-      cur.push(r); size += s;
-    });
-    if (cur.length || !parts.length) parts.push(cur);
-    var base = { action: "apply", spreadsheetId: spreadsheetId, tab: tab, fileName: f.name, totalRows: f.rows.length };
-    if (parts.length === 1) { status("Saving…"); return api("import", Object.assign(base, { rows: parts[0] })); }
-    var id = "imp-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10), n = 0;
-    var send = function () {
-      if (n >= parts.length) { status("Saving…"); return api("import", Object.assign(base, { importId: id, chunks: parts.length })); }
-      status("Uploading part " + (n + 1) + " of " + parts.length + "…");
-      return api("import", { action: "chunk", importId: id, n: n, rows: parts[n] }).then(function () { n++; return send(); });
-    };
-    return send();
-  }
-
-  /* ---------------- Call Pilots setup ---------------- */
-  function renderSetup() {
-    loading();
-    api("dhruva-setup").then(guard(function (j) {
-      var h = '<div class="card"><div class="ch"><b>Call Pilots setup</b>' + (j.ready ? '<span class="ok">✓ Ready</span>' : '<span class="err">Needs setup</span>') + '</div>' +
-        '<p class="muted">The Call Pilots projects talk to each other through settings (Script Properties) and an edit trigger that Google kept for them. When the data comes from CSV files these are not there yet. <b>Apply recommended setup</b> fills in only what is missing — it never changes a value that is already set.</p>' +
-        '<table class="compact"><thead><tr><th>Project</th><th>Setting</th><th>Status</th></tr></thead><tbody>' +
-        j.checks.map(function (c) { return '<tr><td>' + esc(c.project) + '</td><td><code>' + esc(c.key) + '</code>' + (c.note ? '<div class="muted">' + esc(c.note) + '</div>' : '') + '</td><td>' + (c.ok ? '<span class="ok">✓ set</span>' : '<span class="err">missing</span>') + '</td></tr>'; }).join("") +
-        j.triggers.map(function (t) { return '<tr><td>' + esc(t.project) + '</td><td>Edit trigger <code>' + esc(t.handler) + '</code></td><td>' + (t.ok ? '<span class="ok">✓ installed</span>' : '<span class="err">missing</span>') + '</td></tr>'; }).join("") +
-        '</tbody></table><div class="row" style="margin-top:12px"><button class="primary" id="apply"' + (j.ready ? " disabled" : "") + '>Apply recommended setup</button><span class="muted" id="ares"></span></div></div>';
-      h += '<div class="card"><div class="ch"><b>All settings</b><span class="muted">secrets are hidden</span></div><div class="scroll tall"><table class="compact"><thead><tr><th>Project</th><th>Key</th><th>Value</th><th></th></tr></thead><tbody>' +
-        j.properties.map(function (p) { return '<tr><td>' + esc(p.project) + '</td><td><code>' + esc(p.key) + '</code></td><td class="wrap">' + esc(p.value) + '</td><td><button data-k="' + esc(p.project + "|" + p.key) + '">Change</button></td></tr>'; }).join("") +
-        '</tbody></table></div><div class="row" style="margin-top:12px"><button id="addp">Add setting</button></div></div>';
-      tabEl().innerHTML = h;
-      document.getElementById("apply").onclick = function () {
-        var b = this; b.disabled = true; b.textContent = "Applying…";
-        api("dhruva-setup", { action: "run" }).then(function (r) {
-          var bad = (r.ran || []).filter(function (x) { return !x.ok; });
-          if (bad.length) alert("Some steps failed:\n" + bad.map(function (x) { return x.project + " " + x.fn + ": " + x.error; }).join("\n"));
-          renderSetup();
-        }).catch(function (e) { alert(e.message); renderSetup(); });
-      };
-      var edit = function (project, key) {
-        project = project || prompt("Project (portal, pune-call-tracker, pune-incentives, pune-private-backend, hyd-call-tracker, hyd-private-backend):"); if (!project) return;
-        key = key || prompt("Setting key:"); if (!key) return;
-        var v = prompt("New value for " + project + " " + key + " (leave empty and press OK to delete it):", "");
-        if (v === null) return;
-        api("dhruva-setup", { action: "set", project: project, key: key, value: v === "" ? null : v }).then(renderSetup).catch(function (e) { alert(e.message); });
-      };
-      document.getElementById("addp").onclick = function () { edit(); };
-      Array.prototype.forEach.call(tabEl().querySelectorAll("[data-k]"), function (b) { b.onclick = function () { var p = b.dataset.k.split("|"); edit(p[0], p[1]); }; });
-    })).catch(guard(fail));
-  }
-
-  /* ---------------- Shared masters ---------------- */
-  function renderMasters() {
-    loading();
-    api("masters").then(guard(function (j) {
-      var rep = j.report, part = function (k, label) {
-        var p = rep && rep[k];
-        if (!p) return '';
-        return '<h3>' + label + '</h3><div class="stat"><div><b>' + p.dhruvaRows + '</b>in Call Pilots</div><div><b>' + p.ttopRows + '</b>in TTOP</div><div><b>' + p.linked + '</b>already paired</div>' +
-          '<div><b>' + p.toLink + '</b>to pair</div><div><b>' + p.addToTtop + '</b>to add to TTOP</div><div><b>' + p.addToDhruva + '</b>to add to Call Pilots</div>' +
-          '<div><b>' + p.renameInTtop + '</b>renames in TTOP</div><div><b>' + p.renameInDhruva + '</b>renames in Call Pilots</div></div>' +
-          '<details><summary class="muted">Examples</summary><pre>' + esc(JSON.stringify(p.examples, null, 1)) + '</pre></details>' +
-          (p.conflicts.length ? '<pre>' + esc(p.conflicts.join("\n")) + '</pre>' : '');
-      };
-      var modeText = { report: "Report only: nothing is changed yet. Review the numbers below, then turn sync on.", on: "On: changes in either portal are copied to the other every few seconds.", off: "Off: the portals' candidates and clients are not kept in sync." }[j.mode];
-      tabEl().innerHTML = '<div class="card"><b>Shared candidates &amp; clients</b><p class="muted">' + modeText + '</p><div class="row">' +
-        (j.mode !== "on" ? '<button class="primary" data-m="on">Turn sync on</button>' : '<button data-m="off">Pause sync</button>') +
-        (j.mode !== "report" ? '<button data-m="report">Report only</button>' : '') + '<button id="run">Check now</button></div>' +
-        (rep ? '<p class="muted">Last check: ' + esc(new Date(rep.at).toLocaleString()) + (rep.applied ? " (applied)" : " (report)") + '</p>' + part("candidate", "Candidates") + part("client", "Clients") +
-          (rep.errors.length ? '<h3>Problems</h3><pre>' + esc(rep.errors.join("\n")) + '</pre>' : '') : '<p class="muted">No check has run yet.</p>') + '</div>';
-      Array.prototype.forEach.call(tabEl().querySelectorAll("[data-m]"), function (b) {
-        b.onclick = function () {
-          if (b.dataset.m === "on" && !confirm("Turn on sync? Missing candidates and clients are added to the other portal and renames are copied both ways.")) return;
-          api("masters", { mode: b.dataset.m }).then(renderMasters).catch(function (e) { alert(e.message); });
-        };
-      });
-      document.getElementById("run").onclick = function () { this.disabled = true; this.textContent = "Checking…"; api("masters", { run: true }).then(renderMasters).catch(function (e) { alert(e.message); renderMasters(); }); };
-    })).catch(guard(fail));
   }
 
   boot();

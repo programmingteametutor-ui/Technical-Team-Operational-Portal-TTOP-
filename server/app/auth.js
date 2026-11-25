@@ -13,7 +13,7 @@ const crypto = require("crypto");
 const COOKIE = "iop_session";
 const SESSION_HOURS = Number(process.env.APP_SESSION_HOURS || 12);
 const ROLES = ["super_admin", "admin", "user"];
-const PORTALS = ["ttop", "dhruva"];
+const PORTALS = ["ttop", "callpilots"];
 
 function createAuth({ supabaseUrl, serviceKey, anonKey, secret, rest, log }) {
   if (!secret) throw new Error("APP_SECRET is required (any long random text)");
