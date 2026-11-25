@@ -12,6 +12,12 @@
 -- Supabase > SQL Editor > New query > paste this whole file > Run.
 -- =====================================================================
 
+-- (also in 20261125000004; repeated so this file works even if run on its own)
+create or replace function public.cp_is_cp_team(t text) returns boolean
+language sql immutable as $$ select t in ('Pradeep Anna','HYD') $$;
+alter table public.team_members add column if not exists is_call_pilot boolean not null default false;
+alter table public.team_members add column if not exists call_pilot_team text;
+
 -- 1. Other teams: not handlers; kept as "Other" Tool Drive people
 update public.team_members
    set is_call_pilot = false, call_pilot_team = 'Other'

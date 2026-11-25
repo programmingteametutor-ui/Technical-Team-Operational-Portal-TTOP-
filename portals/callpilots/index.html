@@ -386,6 +386,8 @@ var CORE = (function () {
   function rpc(fn, args) {
     return SB.rpc(fn, args || {}).then(function (r) { if (r.error) throw new Error(r.error.message); return r.data; });
   }
+  // Call Pilots is only these two teams (people of other teams are only Tool Drive names)
+  var CP_TEAMS = ["Pradeep Anna", "HYD"], isCpTeam = function (t) { return CP_TEAMS.indexOf(t) >= 0; };
   var PAGES = [
     ["dashboard", "▦", "Dashboard", false], ["incentives", "₹", "Incentives", false], ["calls", "☎", "My calls", false],
     ["add", "＋", "Add Interviews", true], ["assign", "⇄", "Assign Interviews", true]
@@ -400,6 +402,8 @@ var CORE = (function () {
       if (!r.data || !r.data.session) { location.href = "/?next=" + encodeURIComponent("/callpilots/" + location.hash); return; }
       return rpc("cp_me").then(function (me) {
         ME = me;
+        ME.teams = (me.teams || []).filter(isCpTeam);
+        if (me.team && !isCpTeam(me.team)) ME.team = null;
         STATE.month = (me.months || [])[0] || C.listToday().slice(0, 7);
         window.addEventListener("hashchange", route);
         route();
@@ -436,7 +440,7 @@ var CORE = (function () {
   }
   function scopeSel(list) {
     if (!ME.isAdmin) return "";
-    var cp = (list || []).filter(function (m) { return m.isCallPilot && (!STATE.team || m.team === STATE.team); });
+    var cp = (list || []).filter(function (m) { return m.isCallPilot && isCpTeam(m.team) && (!STATE.team || m.team === STATE.team); });
     return '<select id="f_team" aria-label="Team"><option value="">All teams</option>' + (ME.teams || []).map(function (t) { return '<option' + (t === STATE.team ? " selected" : "") + '>' + esc(t) + '</option>'; }).join("") + '</select>' +
       '<select id="f_member" aria-label="Handler"><option value="">All handlers</option>' + cp.map(function (m) { return '<option value="' + m.id + '"' + (String(m.id) === String(STATE.member) ? " selected" : "") + '>' + esc(m.name) + '</option>'; }).join("") + '</select>';
   }
@@ -493,6 +497,7 @@ var CORE = (function () {
           return '<tr><td data-l="Date" class="muted">' + esc(x.date) + '</td><td data-l="Candidate"><b>' + esc(x.candidate) + '</b><div class="muted">' + esc(x.client) + ' · ' + esc(x.round) + (ME.isAdmin && x.handler ? ' · ' + esc(x.handler) : '') + '</div></td><td data-l="Type">' + esc(x.kind) + '</td><td data-l="Amount" class="num">' + C.inr(x.amount) + '<div><span class="pill ' + esc(String(x.status).split(" ")[0]) + '">' + esc(x.status) + '</span></div></td></tr>';
         }).join("") + '</tbody></table>' : '<div class="empty">No incentive activity this month.</div>') + '</div></div>';
       if (ME.isAdmin && d.byHandler) {
+        d.byHandler = d.byHandler.filter(function (x) { return isCpTeam(x.team); });
         var hm = Math.max.apply(null, d.byHandler.map(function (x) { return Number(x.amount); }).concat([1]));
         h += '<div class="card"><div class="ch"><div><b>Handlers</b><small>Calls and incentive in ' + C.monthLong(d.month) + '</small></div></div><div class="cb scroll">' +
           (d.byHandler.length ? '<table class="resp"><thead><tr><th>Handler</th><th class="num">Calls</th><th class="num">Done</th><th>Incentive</th></tr></thead><tbody>' + d.byHandler.map(function (x) {
@@ -528,7 +533,7 @@ var CORE = (function () {
       main().innerHTML = h;
       var draw = function () {
         var q = IF.q.toLowerCase().trim();
-        var L = all.filter(function (x) { return (!IF.kind || x.kind === IF.kind) && (!IF.status || x.status === IF.status) && (!q || [x.candidate, x.client, x.handler].join(" ").toLowerCase().indexOf(q) >= 0); });
+        var L = all.filter(function (x) { return (!x.team || isCpTeam(x.team)) && (!IF.kind || x.kind === IF.kind) && (!IF.status || x.status === IF.status) && (!q || [x.candidate, x.client, x.handler].join(" ").toLowerCase().indexOf(q) >= 0); });
         var tot = L.reduce(function (a, x) { return a + (x.status === "Rejected" ? 0 : Number(x.amount)); }, 0);
         document.getElementById("i_n").textContent = L.length + " record" + (L.length === 1 ? "" : "s") + " shown · " + C.inr(tot);
         document.getElementById("i_t").innerHTML = L.length ? '<table class="resp"><thead><tr><th>Date</th><th>Candidate</th><th>Client</th><th>Round</th><th>Type</th>' + (ME.isAdmin ? '<th>Handler</th>' : '') + '<th class="num">Amount</th><th>Status</th></tr></thead><tbody>' +
@@ -555,7 +560,7 @@ var CORE = (function () {
     Promise.all([rpc("cp_my_calls", { p_member: ME.isAdmin && STATE.member ? Number(STATE.member) : null }), ME.isAdmin ? members() : Promise.resolve([])]).then(guard(function (r) {
       var d = r[0], g = C.groupCalls(d.calls);
       var ctl = ME.isAdmin ? '<select id="c_m" aria-label="Handler"><option value="">' + (ME.memberId ? "My calls" : "Choose a handler") + '</option>' +
-        r[1].filter(function (m) { return m.isCallPilot; }).map(function (m) { return '<option value="' + m.id + '"' + (String(m.id) === String(STATE.member) ? " selected" : "") + '>' + esc(m.name) + (m.team ? " · " + esc(m.team) : "") + '</option>'; }).join("") + '</select>' : '';
+        r[1].filter(function (m) { return m.isCallPilot && isCpTeam(m.team); }).map(function (m) { return '<option value="' + m.id + '"' + (String(m.id) === String(STATE.member) ? " selected" : "") + '>' + esc(m.name) + (m.team ? " · " + esc(m.team) : "") + '</option>'; }).join("") + '</select>' : '';
       var h = head(title, sub, ctl + '<button id="c_r">Refresh</button>');
       if (!d.memberId) h += '<div class="card"><div class="empty">' + (ME.isAdmin ? "Choose a handler to see their calls." : "Your login is not linked to a team member yet. Ask an admin to add your email on TTOP's Team page.") + '</div></div>';
       else {
