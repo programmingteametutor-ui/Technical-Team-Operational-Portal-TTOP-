@@ -113,7 +113,10 @@ function serveCallPilots(res) {
     '<p><a href="/">Back to the home page</a></p></div></body>');
 }
 
-function publicUser(u) { return { email: u.email, name: u.name || "", role: u.role, portals: u.role === "super_admin" ? ["ttop", "callpilots"] : (u.portals || []) }; }
+function publicUser(u) {
+  return { email: u.email, name: u.name || "", role: u.role, portals: u.role === "super_admin" ? ["ttop", "callpilots"] : (u.portals || []),
+    cpTeams: u.role === "super_admin" ? auth.TEAMS.slice() : (u.cp_teams || []), access: auth.access(u) };
+}
 
 async function appApi(req, res, sub) {
   if (sub === "login" && req.method === "POST") {
@@ -136,7 +139,7 @@ async function appApi(req, res, sub) {
       if (req.method === "GET") {
         const all = await auth.loadUsers(true);
         const list = [...all.values()]
-          .filter(u => me.role === "super_admin" || (u.portals || []).some(p => me.portals.includes(p)))
+          .filter(u => { const mine = auth.access(me); return me.role === "super_admin" || auth.access(u).some(k => mine.includes(k)); })
           .map(u => Object.assign(publicUser(u), { active: u.active, lastLogin: u.last_login_at || null, canEdit: auth.mayManage(me, u, u) }));
         return sendJson(res, 200, { ok: true, users: list });
       }

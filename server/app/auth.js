@@ -14,6 +14,7 @@ const COOKIE = "iop_session";
 const SESSION_HOURS = Number(process.env.APP_SESSION_HOURS || 12);
 const ROLES = ["super_admin", "admin", "user"];
 const PORTALS = ["ttop", "callpilots"];
+const TEAMS = ["Pradeep Anna", "HYD"];   // Call Pilots teams (People page, app_users.cp_teams)
 
 function createAuth({ supabaseUrl, serviceKey, anonKey, secret, rest, log }) {
   if (!secret) throw new Error("APP_SECRET is required (any long random text)");
@@ -62,8 +63,10 @@ function createAuth({ supabaseUrl, serviceKey, anonKey, secret, rest, log }) {
   async function loadUsers(force) {
     if (!force && users && Date.now() - usersAt < 15000) return users;
     const cols = "email,name,role,portals,active,updated_by,updated_at";
-    // last_login_at arrives with migration 6; keep working on a database without it
-    const rows = await rest("GET", "app_users?select=" + cols + ",last_login_at&order=email").catch(() => rest("GET", "app_users?select=" + cols + "&order=email"));
+    // cp_teams arrives with migration 20261125000003, last_login_at with migration 6; keep working without them
+    const rows = await rest("GET", "app_users?select=" + cols + ",last_login_at,cp_teams&order=email")
+      .catch(() => rest("GET", "app_users?select=" + cols + ",last_login_at&order=email"))
+      .catch(() => rest("GET", "app_users?select=" + cols + "&order=email"));
     users = new Map(rows.map(u => [u.email, u]));
     usersAt = Date.now();
     return users;
@@ -84,29 +87,46 @@ function createAuth({ supabaseUrl, serviceKey, anonKey, secret, rest, log }) {
   }
 
   /* ---------------- user management rules ---------------- */
-  // super_admin: anyone, any role, any portal.
-  // admin: only people whose portals are within the admin's own portals, only role 'user'.
+  // Access = what a person may open:  "ttop", "cp:Pradeep Anna", "cp:HYD"
+  //   stored as portals (ttop / callpilots) + cp_teams. Super admins have everything.
+  // super_admin: manages anyone, any role, any access.
+  // admin: manages only users (role 'user') whose access is all within the admin's own access.
+  const access = (u) => {
+    if (!u) return [];
+    if (u.role === "super_admin") return ["ttop"].concat(TEAMS.map(t => "cp:" + t));
+    return ((u.portals || []).includes("ttop") ? ["ttop"] : []).concat((u.cp_teams || []).map(t => "cp:" + t));
+  };
   function mayManage(actor, target, next) {
     if (!actor) return false;
     if (actor.role === "super_admin") return true;
     if (actor.role !== "admin") return false;
-    const mine = actor.portals || [];
-    const within = (u) => !u || ((u.role === "user") && (u.portals || []).every(p => mine.includes(p)));
-    return within(target) && within(next) && (!next || (next.portals || []).length > 0);
+    const mine = access(actor);
+    const within = (u) => !u || ((u.role === "user") && access(u).every(k => mine.includes(k)));
+    return within(target) && within(next) && (!next || access(next).length > 0);
   }
   async function saveUser(actor, input) {
     const email = String(input.email || "").trim().toLowerCase();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw httpError(400, "Enter a valid email");
     const role = ROLES.includes(input.role) ? input.role : "user";
-    const portals = (Array.isArray(input.portals) ? input.portals : []).filter(p => PORTALS.includes(p));
-    if (role !== "super_admin" && !portals.length && input.active !== false) throw httpError(400, "Choose at least one portal");
+    // "access" from the People page; older clients send "portals"
+    const keys = Array.isArray(input.access) ? input.access
+      : (Array.isArray(input.portals) ? input.portals : []).map(p => (p === "callpilots" ? null : p)).filter(Boolean);
+    const cp_teams = TEAMS.filter(t => keys.includes("cp:" + t));
+    const portals = (keys.includes("ttop") ? ["ttop"] : []).concat(cp_teams.length ? ["callpilots"] : []);
+    if (role !== "super_admin" && !portals.length && input.active !== false) throw httpError(400, "Choose TTOP or a Call Pilots team");
     const all = await loadUsers(true);
     const existing = all.get(email) || null;
-    const next = { email, role, portals, active: input.active !== false };
-    if (!mayManage(actor, existing, next)) throw httpError(403, actor.role === "admin" ? "Admins can only manage users of their own portal" : "Not allowed");
+    const next = { email, role, portals, cp_teams, active: input.active !== false };
+    if (!mayManage(actor, existing, next)) throw httpError(403, actor.role === "admin" ? "Admins can only manage users of their own portal and team" : "Not allowed");
     if (actor.email === email && (role !== actor.role || !next.active)) throw httpError(400, "You cannot change your own role or switch yourself off");
     if (existing && existing.role === "super_admin" && role !== "super_admin" && countSuper(all) <= 1) throw httpError(400, "Keep at least one super admin");
-    await rest("POST", "app_users?on_conflict=email", [{ email, name: String(input.name || (existing && existing.name) || "").trim() || null, role, portals, active: next.active, updated_by: actor.email }], { Prefer: "resolution=merge-duplicates,return=minimal" });
+    const row = { email, name: String(input.name || (existing && existing.name) || "").trim() || null, role, portals, cp_teams, active: next.active, updated_by: actor.email };
+    await rest("POST", "app_users?on_conflict=email", [row], { Prefer: "resolution=merge-duplicates,return=minimal" })
+      .catch(async (e) => {   // database without cp_teams yet (migration 20261125000003 not run)
+        if (!/cp_teams/.test(e.message)) throw e;
+        delete row.cp_teams;
+        await rest("POST", "app_users?on_conflict=email", [row], { Prefer: "resolution=merge-duplicates,return=minimal" });
+      });
     await loadUsers(true);
     return (await loadUsers()).get(email);
   }
@@ -123,7 +143,7 @@ function createAuth({ supabaseUrl, serviceKey, anonKey, secret, rest, log }) {
   }
   const countSuper = (all) => [...all.values()].filter(u => u.role === "super_admin" && u.active).length;
 
-  return { makeCookie, clearCookie, readCookie, emailFromSupabaseToken, loadUsers, getUser, canOpen, current, mayManage, saveUser, deleteUser, ROLES, PORTALS };
+  return { makeCookie, clearCookie, readCookie, emailFromSupabaseToken, loadUsers, getUser, canOpen, current, mayManage, saveUser, deleteUser, access, ROLES, PORTALS, TEAMS };
 }
 
 function httpError(status, message) { const e = new Error(message); e.status = status; return e; }

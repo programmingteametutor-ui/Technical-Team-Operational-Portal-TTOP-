@@ -417,7 +417,7 @@ var CORE = (function () {
   function route() {
     GEN++;
     var cur = page();
-    var nav = '<nav class="side"><div class="brand"><i>🏆</i><div><b>Call Pilots Operations Portal</b><small>' + esc(ME.isAdmin ? "Admin access" : "Handler access") + '</small></div></div>' +
+    var nav = '<nav class="side"><div class="brand"><i>🏆</i><div><b>Call Pilots Operations Portal</b><small>' + esc(ME.isSuper ? "Super admin" : ME.isAdmin ? "Admin · " + ((ME.teams || []).join(", ") || "no team") : "Handler" + (ME.team ? " · " + ME.team : "")) + '</small></div></div>' +
       PAGES.filter(function (p) { return !p[3] || ME.isAdmin; }).map(function (p) { return '<a href="#' + p[0] + '" class="' + (p[0] === cur ? "on" : "") + '"><span>' + p[1] + '</span>' + p[2] + '</a>'; }).join("") +
       '<div class="foot">' + esc(ME.name) + (ME.team ? " · " + esc(ME.team) : "") + '<br><a href="/">Home</a> · <a href="/?signout=1">Sign out</a></div></nav>';
     $root.innerHTML = '<div class="app">' + nav + '<main id="main"></main></div>';
@@ -504,7 +504,7 @@ var CORE = (function () {
           '<div><span>Calls completed</span><b>' + nf(c.completed) + ' of ' + nf(c.assigned) + '</b></div>' +
           '<div><span>Not paid yet</span><b>' + C.inr(inc.waiting) + '</b></div></div></div>';
       }
-      h += '</div><div class="foot2"><span>' + (ME.isAdmin ? "Admin access: all handlers." : "Personal access: only your calls and incentives are shown.") + '</span><span>All amounts are in Indian Rupees (₹)</span></div>';
+      h += '</div><div class="foot2"><span>' + (ME.isAdmin ? (ME.isSuper ? "Super admin: all teams." : "Admin access: " + esc((ME.teams || []).join(", ") || "no team") + " team.") : "Personal access: only your calls and incentives are shown.") + '</span><span>All amounts are in Indian Rupees (₹)</span></div>';
       main().innerHTML = h;
       bindScope(pDashboard);
     })).catch(guard(fail));
@@ -524,7 +524,7 @@ var CORE = (function () {
         '<select id="i_s"><option value="">All statuses</option>' + sts.map(function (k) { return '<option' + (k === IF.status ? " selected" : "") + '>' + k + '</option>'; }).join("") + '</select>' +
         '<button id="i_c">Clear filters</button></div><div class="cb" style="padding-top:0"><div id="i_n" class="muted" style="font-size:12px"></div><div id="i_t" class="scroll"></div></div></div>' +
         '<div class="note">“Waiting for closer list”: a selection incentive is paid only after the candidate is on the month\'s closer list. “Pending approval”: an admin is checking a change.</div>' +
-        '<div class="foot2"><span>' + (ME.isAdmin ? "Admin access: all handlers." : "Personal access: only your incentive records are shown.") + '</span><span>All amounts are in Indian Rupees (₹)</span></div>';
+        '<div class="foot2"><span>' + (ME.isAdmin ? (ME.isSuper ? "Super admin: all teams." : "Admin access: " + esc((ME.teams || []).join(", ") || "no team") + " team.") : "Personal access: only your incentive records are shown.") + '</span><span>All amounts are in Indian Rupees (₹)</span></div>';
       main().innerHTML = h;
       var draw = function () {
         var q = IF.q.toLowerCase().trim();
@@ -694,12 +694,12 @@ var CORE = (function () {
         }).join("") + '</div>' +
         '<textarea id="s_t" rows="9" style="margin-top:10px" placeholder="*HYD Team*&#10;Sri Charan S (Ireland) - 1:30&#10;Sakshi Goud (UK) - 6:00 (*Karthikeya*)">' + esc(ASG.text) + '</textarea>' +
         '<div class="ctl" style="margin-top:10px"><button class="p" id="s_m">Match interviews</button></div></div></div><div id="s_r"></div>' +
-        '<div class="card"><div class="ch"><div><b>Call Pilots handlers</b><small>Who appears on the dashboards and as a team lead. Team members come from TTOP\'s Team page (same login email).</small></div><button id="s_h">Show</button></div><div id="s_hl" class="cb scroll" hidden></div></div>';
+        '<div class="card"><div class="ch"><div><b>Call Pilots handlers</b><small>Who appears on the dashboards and as a team lead. People given a Call Pilots team on the home page (People) are added here automatically.</small></div><button id="s_h">Show</button></div><div id="s_hl" class="cb scroll" hidden></div></div>';
       main().innerHTML = h;
       document.getElementById("s_h").onclick = function () {
         var box = document.getElementById("s_hl"); box.hidden = !box.hidden; this.textContent = box.hidden ? "Show" : "Hide";
         if (box.hidden) return;
-        var teams = (ME.teams || []).concat(["Pradeep Anna", "HYD"]).filter(function (v, i, a) { return a.indexOf(v) === i; });
+        var teams = ME.isSuper ? (ME.teams || []).concat(["Pradeep Anna", "HYD"]).filter(function (v, i, a) { return a.indexOf(v) === i; }) : (ME.teams || []);
         box.innerHTML = '<datalist id="s_teams">' + teams.map(function (t) { return '<option value="' + esc(t) + '">'; }).join("") + '</datalist>' +
           '<table class="resp"><thead><tr><th>Team member</th><th>Call Pilots handler</th><th>Team</th><th></th></tr></thead><tbody>' + mem.map(function (m) {
             return '<tr><td data-l="Member"><b>' + esc(m.name) + '</b><div class="muted">' + esc(m.email) + '</div></td><td data-l="Handler"><input type="checkbox" data-hc="' + m.id + '"' + (m.isCallPilot ? " checked" : "") + '></td>' +

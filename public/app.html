@@ -112,6 +112,10 @@
     callpilots: { name: "Call Pilots Operations Portal", desc: "Interview calls for the Pradeep Anna Team and the Hyderabad team: my calls, incentives, adding and assigning interviews.", url: "/callpilots/" }
   };
   var ROLE_LABEL = { super_admin: "Super admin", admin: "Admin", user: "User" };
+  // what a person may open: TTOP, and Call Pilots per team (stored as portals + cp_teams)
+  var ACCESS = [["ttop", "TTOP"], ["cp:Pradeep Anna", "Call Pilots · Pradeep Anna Team"], ["cp:HYD", "Call Pilots · HYD Team"]];
+  var accessLabel = function (k) { var a = ACCESS.filter(function (x) { return x[0] === k; })[0]; return a ? a[1] : k; };
+  var accessOf = function (u) { return u.access || (u.portals || []).filter(function (p) { return p === "ttop"; }); };
   var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); };
 
   function api(path, body, method) {
@@ -214,6 +218,7 @@
     var t = '<div class="tiles">';
     Object.keys(PORTALS).forEach(function (k) {
       var ok = ME.portals.indexOf(k) >= 0, P = PORTALS[k];
+      if (k === "callpilots" && ok && ME.role !== "super_admin") P = Object.assign({}, P, { desc: P.desc + " Your team: " + ((ME.cpTeams || []).join(", ") || "none yet") + "." });
       t += '<div class="tile' + (ok ? "" : " off") + '"><h2>' + P.name + '</h2><p>' + P.desc + '</p>' +
         (ok ? '<span class="role">You: ' + ROLE_LABEL[ME.role] + '</span><button class="primary" data-p="' + k + '">Open ' + P.name + '</button>' : '<span class="role">No access</span>') + '</div>';
     });
@@ -329,11 +334,12 @@
       var j = r[0], sign = r[1].signups, Q = "";
       var draw = function () {
         var q = Q.toLowerCase();
-        var list = j.users.filter(function (u) { return !q || (u.email + " " + (u.name || "") + " " + u.role + " " + u.portals.join(" ")).toLowerCase().indexOf(q) >= 0; });
+        var list = j.users.filter(function (u) { return !q || (u.email + " " + (u.name || "") + " " + u.role + " " + accessOf(u).map(accessLabel).join(" ")).toLowerCase().indexOf(q) >= 0; });
         document.getElementById("ulist").innerHTML = list.map(function (u) {
           return '<tr><td><b>' + esc(u.name || "") + '</b><div class="muted">' + esc(u.email) + '</div></td>' +
             '<td><span class="pill ' + u.role + '">' + ROLE_LABEL[u.role] + '</span>' + (u.active ? "" : ' <span class="pill warn">blocked</span>') + '</td>' +
-            '<td>' + (u.portals.length ? u.portals.map(function (p) { return '<span class="pill">' + (p === "ttop" ? "TTOP" : "Call Pilots") + '</span>'; }).join("") : '<span class="muted">none</span>') + '</td>' +
+            '<td>' + (accessOf(u).length ? accessOf(u).map(function (k) { return '<span class="pill">' + esc(accessLabel(k)) + '</span>'; }).join(" ") : '<span class="muted">none</span>') +
+              (u.role !== "super_admin" && (u.portals || []).indexOf("callpilots") >= 0 && !(u.cpTeams || []).length ? ' <span class="pill warn" title="Edit and tick a Call Pilots team">Call Pilots: no team</span>' : '') + '</td>' +
             '<td class="muted nowrap">' + when(u.lastLogin) + '</td>' +
             '<td>' + (u.canEdit ? '<button data-e="' + esc(u.email) + '">Edit</button>' : '') + '</td></tr>';
         }).join("") || '<tr><td colspan="5" class="muted">No match.</td></tr>';
@@ -347,7 +353,7 @@
           (ME.role === "super_admin" ? '<button class="danger" data-no="' + esc(s.email) + '">Block</button>' : '') + '</td></tr>';
       }).join("") + '</tbody></table></div>';
       h += '<div class="card"><div class="row" style="justify-content:space-between"><div><b>People and access</b><div class="muted">' +
-        (ME.role === "super_admin" ? "Super admins open both portals. Admins and users open the portals ticked for them." : "You can add and change users of your portal.") +
+        (ME.role === "super_admin" ? "Super admins see everything. Admins and users see only the portal and Call Pilots team ticked for them." : "You can add and change users of your portal and team.") +
         ' TTOP access follows this list automatically. In Call Pilots, users see their own calls and incentives; admins see everyone and add and assign interviews.</div></div>' +
         '<button class="primary" id="add">Add person</button></div>' +
         '<div class="row" style="margin-top:12px"><input type="text" id="q" placeholder="Search name, email, role, portal" style="flex:1;min-width:220px"><span class="muted">' +
@@ -361,7 +367,7 @@
       Array.prototype.forEach.call(tabEl().querySelectorAll("[data-no]"), function (b) {
         b.onclick = function () {
           if (!confirm("Block " + b.dataset.no + "? They stay signed out of both portals and leave this list. You can give access later from People.")) return;
-          api("users", { email: b.dataset.no, role: "user", portals: [], active: false }).then(renderAccess).catch(function (e) { alert(e.message); });
+          api("users", { email: b.dataset.no, role: "user", access: [], active: false }).then(renderAccess).catch(function (e) { alert(e.message); });
         };
       });
     })).catch(guard(fail));
@@ -369,17 +375,17 @@
 
   function editUser(u, prefill) {
     var isNew = !u;
-    u = u || { email: (prefill && prefill.email) || "", name: (prefill && prefill.name) || "", role: "user", portals: ME.role === "admin" ? ME.portals.slice() : [], active: true };
+    u = u || { email: (prefill && prefill.email) || "", name: (prefill && prefill.name) || "", role: "user", access: ME.role === "admin" && accessOf(ME).length === 1 ? accessOf(ME).slice() : [], active: true };
     var roles = ME.role === "super_admin" ? ["super_admin", "admin", "user"] : ["user"];
-    var portals = ME.role === "super_admin" ? ["ttop", "callpilots"] : ME.portals;
+    var choices = ME.role === "super_admin" ? ACCESS.map(function (a) { return a[0]; }) : accessOf(ME), has = accessOf(u);
     var d = document.createElement("dialog");
     d.innerHTML = '<h3 style="margin-top:0">' + (isNew ? (prefill ? "Give access" : "Add person") : "Edit " + esc(u.email)) + '</h3>' +
       '<label>Email</label><input type="email" id="f_email" value="' + esc(u.email) + '"' + (isNew && !prefill ? "" : " disabled") + '>' +
       '<label>Name</label><input type="text" id="f_name" value="' + esc(u.name || "") + '">' +
       '<label>Role</label><select id="f_role">' + roles.map(function (r) { return '<option value="' + r + '"' + (r === u.role ? " selected" : "") + '>' + ROLE_LABEL[r] + '</option>'; }).join("") + '</select>' +
-      '<label>Portals</label><div id="f_portals">' + portals.map(function (p) { return '<label style="display:inline-flex;gap:6px;font-weight:400;margin-right:14px"><input type="checkbox" value="' + p + '"' + (u.portals.indexOf(p) >= 0 ? " checked" : "") + '>' + (p === "ttop" ? "TTOP" : "Call Pilots") + '</label>'; }).join("") + '</div>' +
+      '<label>Access</label><div id="f_portals">' + choices.map(function (k) { return '<label style="display:flex;gap:8px;font-weight:400;margin:6px 0"><input type="checkbox" value="' + esc(k) + '"' + (has.indexOf(k) >= 0 ? " checked" : "") + '>' + esc(accessLabel(k)) + '</label>'; }).join("") + '</div>' +
       '<label style="display:flex;gap:6px;font-weight:400;margin-top:12px"><input type="checkbox" id="f_active"' + (u.active ? " checked" : "") + '> Active (untick to block)</label>' +
-      '<p class="muted" style="font-size:12px">Super admins always get both portals. Admins manage their portal; users see only their own work.</p><p class="err" id="f_err"></p>' +
+      '<p class="muted" style="font-size:12px">Super admins see everything. An admin sees and manages only the portal and Call Pilots team(s) ticked here; a user sees only their own work. A Call Pilots team also makes the person a handler of that team.</p><p class="err" id="f_err"></p>' +
       '<div class="row" style="justify-content:space-between;margin-top:8px">' + (isNew ? "<span></span>" : '<button class="danger" id="f_del">Remove</button>') +
       '<div class="row"><button id="f_cancel">Cancel</button><button class="primary" id="f_save">Save</button></div></div>';
     document.body.appendChild(d); d.showModal();
@@ -388,7 +394,7 @@
     d.querySelector("#f_save").onclick = function () {
       var body = {
         email: d.querySelector("#f_email").value, name: d.querySelector("#f_name").value, role: d.querySelector("#f_role").value,
-        portals: Array.prototype.map.call(d.querySelectorAll("#f_portals input:checked"), function (x) { return x.value; }),
+        access: Array.prototype.map.call(d.querySelectorAll("#f_portals input:checked"), function (x) { return x.value; }),
         active: d.querySelector("#f_active").checked
       };
       api("users", body).then(function () { close(); render(); }).catch(function (e) { d.querySelector("#f_err").textContent = e.message; });
