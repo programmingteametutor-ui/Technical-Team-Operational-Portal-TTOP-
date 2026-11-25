@@ -695,7 +695,7 @@ var CORE = (function () {
         '<textarea id="s_t" rows="9" style="margin-top:10px" placeholder="*HYD Team*&#10;Sri Charan S (Ireland) - 1:30&#10;Sakshi Goud (UK) - 6:00 (*Karthikeya*)">' + esc(ASG.text) + '</textarea>' +
         '<div class="ctl" style="margin-top:10px"><button class="p" id="s_m">Match interviews</button></div></div></div><div id="s_r"></div>' +
         '<div class="card"><div class="ch"><div><b>Tool Drive list</b><small>Everyone who can be the Tool Drive of a call, by team. ' +
-        'Pradeep Anna and HYD handlers come from People on the home page (they use this app). People of other teams (Development, Marketing, …) only need to be listed here: no app access.</small></div></div>' +
+        'Pradeep Anna and HYD handlers come from People on the home page (they use this app). People of other teams who drive some calls are listed under Other: no app access.</small></div></div>' +
         '<div class="cb" id="s_tdl"></div></div>';
       main().innerHTML = h;
       drawToolDriveList(mem);
@@ -709,27 +709,30 @@ var CORE = (function () {
   /* Tool Drive list: chips per team (like the scheduler's team board), add / remove */
   function drawToolDriveList(mem) {
     var box = document.getElementById("s_tdl"); if (!box) return;
-    var listed = mem.filter(function (m) { return m.team; });
-    var cpTeams = ME.isSuper ? ["Pradeep Anna", "HYD"] : (ME.teams || []);
-    var order = cpTeams.concat(listed.map(function (m) { return m.team; })).filter(function (v, i, a) { return a.indexOf(v) === i; });
-    var known = order.concat(["Development", "Marketing", "Sai", "Sandeep Anna"]).filter(function (v, i, a) { return a.indexOf(v) === i; });
-    box.innerHTML = order.map(function (t) {
-      var L = listed.filter(function (m) { return m.team === t; });
-      var isCp = t === "Pradeep Anna" || t === "HYD";
-      return '<div class="grp" style="margin:6px 0 8px;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--mute)">' + esc(t) + (isCp ? ' team <span class="pill" style="text-transform:none">uses the app</span>' : ' team') + '</div>' +
-        '<div style="display:flex;flex-wrap:wrap;gap:8px">' + (L.length ? L.map(function (m) {
-          return '<span class="pill' + (isCp && !m.isCallPilot ? ' mute' : '') + '" style="font-size:13px;padding:6px 10px;display:inline-flex;gap:8px;align-items:center" title="' + esc(m.email || "No app login") + '">' + esc(m.name) +
-            ' <button class="sm" data-rm="' + m.id + '" aria-label="Remove ' + esc(m.name) + '" style="padding:0 6px;border:0;background:transparent">✕</button></span>';
-        }).join("") : '<span class="muted" style="font-size:12px">Nobody yet' + (isCp ? ' (give people this team on People)' : '') + '</span>') + '</div>';
+    // Call Pilots is only Pradeep Anna and HYD; everyone else who drives some calls is "Other" (no team shown, no app access)
+    var CP = ["Pradeep Anna", "HYD"], cpTeams = ME.isSuper ? CP : (ME.teams || []).filter(function (t) { return CP.indexOf(t) >= 0; });
+    var chip = function (m, faded) {
+      return '<span class="pill' + (faded ? ' mute' : '') + '" style="font-size:13px;padding:6px 10px;display:inline-flex;gap:8px;align-items:center" title="' + esc(m.email || "No app login") + '">' + esc(m.name) +
+        ' <button class="sm" data-rm="' + m.id + '" aria-label="Remove ' + esc(m.name) + '" style="padding:0 6px;border:0;background:transparent">✕</button></span>';
+    };
+    var section = function (title, L, empty, faded) {
+      return '<div class="grp" style="margin:6px 0 8px;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--mute)">' + title + '</div>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:8px">' + (L.length ? L.map(function (m) { return chip(m, faded && faded(m)); }).join("") : '<span class="muted" style="font-size:12px">' + empty + '</span>') + '</div>';
+    };
+    var others = mem.filter(function (m) { return m.team && CP.indexOf(m.team) < 0; });
+    box.innerHTML = cpTeams.map(function (t) {
+      return section(esc(t) + ' team', mem.filter(function (m) { return m.team === t; }), 'Nobody yet: give people this team on People (home page)', function (m) { return !m.isCallPilot; });
     }).join("") +
-      '<datalist id="s_tl">' + known.map(function (t) { return '<option value="' + esc(t) + '">'; }).join("") + '</datalist>' +
-      '<div class="ctl" style="margin-top:14px"><input id="s_an" placeholder="Name, as written in the Tool Drive list (e.g. Ravi K)" style="flex:2 1 220px"><input id="s_at" list="s_tl" placeholder="Team (e.g. Development)" style="flex:1 1 160px"><button class="p" id="s_ab">Add</button></div>';
+      section('Other Tool Drive people <span class="pill mute" style="text-transform:none">not in this portal</span>', others, 'Nobody yet') +
+      '<div class="ctl" style="margin-top:14px"><input id="s_an" placeholder="Name, as written in the Tool Drive list (e.g. Ravi K)" style="flex:2 1 220px">' +
+      '<select id="s_at" style="flex:1 1 180px">' + cpTeams.map(function (t) { return '<option value="' + esc(t) + '">' + esc(t) + ' team</option>'; }).join("") +
+      '<option value="Other" selected>Other team (no app access)</option></select><button class="p" id="s_ab">Add</button></div>';
     document.getElementById("s_ab").onclick = function () {
-      var n = document.getElementById("s_an").value.trim(), t = document.getElementById("s_at").value.trim(), b = this;
-      if (!n || !t) return toast("Enter a name and a team");
+      var n = document.getElementById("s_an").value.trim(), t = document.getElementById("s_at").value, b = this;
+      if (!n) return toast("Enter a name");
       b.disabled = true;
       rpc("cp_add_tool_drive_person", { p_name: n, p_team: t }).then(function () { MEMBERS = null; return members(); })
-        .then(function (m2) { toast(n + " added to " + t); drawToolDriveList(m2); })
+        .then(function (m2) { toast(n + (t === "Other" ? " added as an other Tool Drive person" : " added to " + t)); drawToolDriveList(m2); })
         .catch(function (e) { b.disabled = false; toast(e.message); });
     };
     Array.prototype.forEach.call(box.querySelectorAll("[data-rm]"), function (b) {

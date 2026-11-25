@@ -93,3 +93,13 @@ test('Tool Drive teams: other teams can be Tool Drive without app access; People
   assert.match(body('cp_add_tool_drive_person'), /You can only add people to your own Call Pilots team/);
   assert.match(body('cp_members'), /not public\.cp_is_cp_team\(tm\.call_pilot_team\)/);
 });
+
+test('Call Pilots shows only Pradeep Anna and HYD; other teams are "Other" Tool Drive people', () => {
+  const sql = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '20261125000005_only_two_teams.sql'), 'utf8');
+  assert.match(sql, /when public\.cp_role\(\) = 'super_admin' then array\['HYD','Pradeep Anna'\]/);
+  assert.match(sql, /set is_call_pilot = false, call_pilot_team = 'Other'/);
+  assert.match(sql, /if not public\.cp_is_cp_team\(t\) then t := 'Other'; end if;/);
+  const page = fs.readFileSync(path.join(__dirname, '..', 'portals', 'callpilots', 'index.html'), 'utf8');
+  assert.doesNotMatch(page, /Development/);
+  assert.match(page, /Other Tool Drive people/);
+});
