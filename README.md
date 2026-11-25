@@ -51,8 +51,8 @@ Use **TTOP's existing Supabase project**. Do **not** run TTOP's
 `reset_and_setup_DELETES_ALL_DATA.sql` on it: that file wipes the database.
 
 1. **Database** (Supabase → SQL Editor, on a test project or branch first), in order:
-   `20261124000004_combined_app.sql`, `20261124000006_admin_dashboard.sql`,
-   `20261124000007_server_timeout.sql`, `20261125000001_callpilots.sql`.
+   `20261124000004_combined_app.sql`, `20261124000006_admin_dashboard.sql`
+   (both already run on the live project), then `20261125000001_callpilots.sql`.
    The last one only adds columns and functions, renames the portal id
    `dhruva` → `callpilots`, and marks Call Pilots handlers from the old user
    list (read the notice for anyone it could not match).
@@ -64,8 +64,7 @@ Use **TTOP's existing Supabase project**. Do **not** run TTOP's
    URL is the Vercel address and `https://<address>/` is in Redirect URLs.
 4. **Deploy** to Vercel (Framework preset *Other*, no build command).
    `vercel.json` sends every request to `api/index.js` (Mumbai region).
-5. **TTOP's schedules** (doc sync, inbox, phone alerts) keep running. If you
-   deployed to a **new** address, run `supabase/repoint_ttop_schedules.sql`.
+5. **TTOP's schedules** (doc sync, inbox, phone alerts) keep running unchanged.
 6. **After you sign off on the new Call Pilots portal:** run
    `supabase/migrations/20261126000001_callpilots_archive.sql`. It moves the old
    Apps Script data (`gs_*`) into the schema `archive_dhruva` (nothing deleted),

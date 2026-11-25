@@ -817,6 +817,14 @@ end $g$;
 
 
 -- =====================================================================
+-- 10. Server key time limit: 60 s, the same as the app's Vercel function.
+--     (Replaces the 240 s that the old Dhruva CSV import needed.)
+-- =====================================================================
+alter role service_role set statement_timeout = '60s';
+notify pgrst, 'reload config';
+
+
+-- =====================================================================
 -- Checks (read the results)
 -- =====================================================================
 select 'portals' as check, portals::text as value, count(*) as n from public.app_users group by 2

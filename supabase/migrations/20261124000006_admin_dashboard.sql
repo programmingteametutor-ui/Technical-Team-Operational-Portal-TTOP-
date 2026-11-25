@@ -1,39 +1,11 @@
 -- =====================================================================
--- Super admin dashboard: TTOP figures, sign-up requests, CSV imports.
--- Safe to run more than once. Changes no TTOP or Dhruva table except
+-- Super admin dashboard: TTOP figures and sign-up requests.
+-- Safe to run more than once. Changes no TTOP table except
 -- adding last_login_at to app_users.
 -- =====================================================================
 
 alter table public.app_users add column if not exists last_login_at timestamptz;
 
--- One row per CSV file imported into a Dhruva tab
-create table if not exists public.app_imports (
-  id             bigint generated always as identity primary key,
-  at             timestamptz not null default now(),
-  by_email       text,
-  file_name      text,
-  spreadsheet_id text not null,
-  tab            text not null,
-  rows_in        int not null default 0,
-  rows_before    int not null default 0,
-  dates          int not null default 0,
-  numbers        int not null default 0,
-  note           text
-);
-create index if not exists app_imports_tab on public.app_imports (spreadsheet_id, tab, at desc);
-
--- Large CSV files arrive in parts (Vercel takes at most 4.5 MB per request)
-create table if not exists public.app_import_chunks (
-  import_id  text not null,
-  n          int not null,
-  rows       jsonb not null,
-  created_at timestamptz not null default now(),
-  primary key (import_id, n)
-);
-
-alter table public.app_imports       enable row level security;
-alter table public.app_import_chunks enable row level security;
-revoke all on public.app_imports, public.app_import_chunks from anon, authenticated;
 
 -- ---------------------------------------------------------------------
 -- People who signed in with Google but have no portal access yet

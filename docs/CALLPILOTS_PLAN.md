@@ -180,10 +180,9 @@ server/app/ttop.js                     unchanged
 server/app/admin.js                    Dhruva figures replaced by cp_dashboard
 public/app.html                        Call Pilots widgets replaced
 scripts/check.js                       rewritten (no Apps Script projects)
-supabase/migrations/20261124000004_combined_app.sql   dhruva → callpilots; app_master_links/app_state removed
-supabase/migrations/20261124000006_admin_dashboard.sql app_imports parts removed
-supabase/migrations/20261124000007_server_timeout.sql kept
-supabase/repoint_ttop_schedules.sql    kept (TTOP schedules)
+supabase/migrations/20261124000004_combined_app.sql   done: callpilots id; app_master_links/app_state removed
+supabase/migrations/20261124000006_admin_dashboard.sql done: app_imports parts removed
+DELETED too: 20261124000007_server_timeout.sql (Dhruva CSV only; 60 s set in callpilots.sql), repoint_ttop_schedules.sql (address unchanged)
 package.json, vercel.json, .env.example, README.md     updated
 docs/reference-ui/*                    kept
 NEW: portals/callpilots/index.html, portals/callpilots/test/*, supabase/migrations/20261125000001_callpilots.sql,

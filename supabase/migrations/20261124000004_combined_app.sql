@@ -1,8 +1,8 @@
 -- =====================================================================
--- Interview Operations Portal (TTOP + Dhruva) — combined app layer
+-- Interview Operations Portal (TTOP + Call Pilots) — combined app layer
 --
 -- Run AFTER the TTOP schema exists (it is already live in TTOP's Supabase
--- project) and after the three dhruva_* migrations. Keeps all data.
+-- project). Keeps all data.
 -- Safe to run again. Does not change any TTOP table or function; it only
 -- ADDS tables and triggers.
 --
@@ -13,47 +13,28 @@
 --   TTOP access        app_users drives TTOP's own access flags
 --                        (profiles.approved / role / removed and admin_emails),
 --                      so TTOP's row-level security keeps enforcing it.
---   app_master_links   which Dhruva Candidate/Client Master ID is which
---                      TTOP candidate/client (shared masters)
 -- =====================================================================
 
 create table if not exists public.app_users (
   email      text primary key check (email = lower(btrim(email)) and email like '%@%'),
   name       text,
   role       text not null default 'user' check (role in ('super_admin','admin','user')),
-  portals    text[] not null default '{}' check (portals <@ array['ttop','dhruva']::text[]),
+  portals    text[] not null default '{}' check (portals <@ array['ttop','callpilots']::text[]),
   active     boolean not null default true,
   updated_by text,
   updated_at timestamptz not null default now(),
   created_at timestamptz not null default now()
 );
 
-create table if not exists public.app_master_links (
-  kind        text not null check (kind in ('candidate','client')),
-  dhruva_id   text not null,            -- CAN-000083 / CLI-000030 (Dhruva master ID)
-  entity_id   bigint not null,          -- public.candidates.id / public.clients.id
-  ttop_name   text not null,            -- TTOP name seen at the last sync
-  dhruva_name text not null,            -- Dhruva name seen at the last sync
-  updated_at  timestamptz not null default now(),
-  primary key (kind, dhruva_id)
-);
-create index if not exists app_master_links_entity on public.app_master_links (kind, entity_id);
-
-create table if not exists public.app_state (
-  key text primary key, value text, updated_at timestamptz not null default now()
-);
-
 alter table public.app_users        enable row level security;
-alter table public.app_master_links enable row level security;
-alter table public.app_state        enable row level security;
-revoke all on public.app_users, public.app_master_links, public.app_state from anon, authenticated;
+revoke all on public.app_users from anon, authenticated;
 
 -- super_admin always has both portals
 create or replace function public.app_users_normalize() returns trigger
 language plpgsql set search_path = public as $$
 begin
   new.email := lower(btrim(new.email));
-  if new.role = 'super_admin' then new.portals := array['ttop','dhruva'];
+  if new.role = 'super_admin' then new.portals := array['callpilots','ttop'];
   else new.portals := array(select distinct p from unnest(coalesce(new.portals, '{}')) p order by p);
   end if;
   new.updated_at := now();
@@ -130,7 +111,7 @@ begin
         role = case
           when a.role = 'super_admin' then 'super_admin'
           when new.approved and not new.removed and new.role = 'admin' then 'admin'
-          when new.approved and not new.removed and new.role = 'user' and a.role = 'admin' and not ('dhruva' = any(a.portals)) then 'user'
+          when new.approved and not new.removed and new.role = 'user' and a.role = 'admin' and not ('callpilots' = any(a.portals)) then 'user'
           else a.role end,
         updated_by = coalesce((select auth.jwt() ->> 'email'), 'ttop')
       where a.email = lower(btrim(new.email));
@@ -149,8 +130,6 @@ create trigger t_zz_profile_app_access after insert or update of approved, role,
 
 -- ---------------------------------------------------------------------
 -- Seed from TTOP: everyone TTOP currently lets in keeps exactly that access.
--- (Dhruva's users are added by the server on first start, from Dhruva's
---  V2 User Access tab, and merged with these rows.)
 -- ---------------------------------------------------------------------
 insert into public.app_users (email, name, role, portals, updated_by)
 select lower(btrim(p.email)), p.name,
