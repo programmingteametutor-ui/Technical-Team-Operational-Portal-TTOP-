@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1f4d">
+<title>Call Pilots Operations Portal</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icons/icon-192.png">
+<style>
+:root{--bg:#f4f6fb;--card:#fff;--ink:#0f172a;--mute:#64748b;--line:#e6eaf2;--pri:#4f46e5;--pri2:#eef0ff;--nav:#0b1f4d;--nav2:#132a63;
+--ok:#15803d;--okb:#e8f7ee;--warn:#b45309;--warnb:#fff4e0;--bad:#b91c1c;--badb:#fdecec;--r:18px;--sh:0 2px 14px rgba(15,23,42,.06)}
+*{box-sizing:border-box}html,body{margin:0}
+body{font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink);-webkit-text-size-adjust:100%}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;border:1px solid var(--line);background:#fff;border-radius:12px;padding:9px 14px;font-weight:600}
+button.p{background:var(--pri);border-color:var(--pri);color:#fff}button.d{color:var(--bad)}button:disabled{opacity:.5;cursor:default}
+button.sm{padding:6px 10px;font-size:12px;border-radius:10px}
+input,select,textarea{border:1px solid var(--line);border-radius:12px;padding:9px 12px;background:#fff;min-width:0}
+textarea{width:100%;resize:vertical}
+a{color:var(--pri)}
+.app{display:flex;min-height:100vh}
+nav.side{width:240px;flex:none;background:linear-gradient(180deg,var(--nav),var(--nav2));color:#fff;padding:18px 14px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column}
+.brand{display:flex;gap:10px;align-items:center;margin:4px 6px 22px}.brand i{width:38px;height:38px;border-radius:12px;background:linear-gradient(135deg,#6366f1,#a855f7);display:grid;place-items:center;font-style:normal;font-size:18px}
+.brand b{display:block;font-size:14px;line-height:1.2}.brand small{opacity:.75;font-size:11px}
+nav.side a{display:flex;gap:10px;align-items:center;color:#dbe4ff;text-decoration:none;padding:11px 12px;border-radius:12px;margin:2px 0;font-weight:500}
+nav.side a.on{background:var(--pri);color:#fff}nav.side a:hover{background:rgba(255,255,255,.08)}
+nav.side .foot{margin-top:auto;font-size:12px;opacity:.85;padding:10px 6px}nav.side .foot a{display:inline;padding:0;color:#c7d2fe}
+main{flex:1;min-width:0;padding:22px 26px 90px}
+.head{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;justify-content:space-between;margin-bottom:16px}
+.head h1{margin:0;font-size:26px;letter-spacing:-.02em}.head p{margin:4px 0 0;color:var(--mute)}
+.ctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sh);margin-bottom:16px}
+.card>.ch{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;padding:16px 18px 10px;border-bottom:1px solid var(--line)}
+.card>.ch b{font-size:16px}.card>.ch small{display:block;color:var(--mute);font-size:12px}
+.card>.cb{padding:14px 18px}
+.tiles{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;padding:14px}
+.tile{border:1px solid var(--line);border-radius:16px;padding:14px;background:#fff}
+.tile span{font-size:12px;color:var(--mute);font-weight:600}.tile b{display:block;font-size:26px;margin:4px 0 2px}.tile small{color:var(--mute);font-size:11px}
+.tile.warn b{color:var(--warn)}
+.itiles{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-bottom:16px}
+.itiles .tile{display:flex;gap:12px;align-items:center;box-shadow:var(--sh)}.itiles .ic{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;font-size:20px;flex:none}
+.grid3{display:grid;grid-template-columns:2fr 1.3fr 1fr;gap:16px}.grid3>.card{margin:0}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}.grid2>.card{margin:0}
+.muted{color:var(--mute)}.empty{color:var(--mute);text-align:center;padding:28px 10px}
+.err{color:var(--bad)}.ok{color:var(--ok)}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;color:var(--mute);font-weight:600;white-space:nowrap}td.num,th.num{text-align:right;white-space:nowrap}
+.scroll{overflow:auto}
+.pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;background:var(--pri2);color:var(--pri);white-space:nowrap}
+.pill.Paid,.pill.Completed,.pill.added,.pill.assigned,.pill.rescheduled{background:var(--okb);color:var(--ok)}
+.pill.Pending,.pill.Scheduled,.pill.changed{background:var(--pri2);color:var(--pri)}
+.pill.w,.pill.Waiting,.pill.review{background:var(--warnb);color:var(--warn)}
+.pill.Cancelled,.pill.Rejected,.pill.failed,.pill.bad{background:var(--badb);color:var(--bad)}
+.pill.Rescheduled,.pill.mute{background:#f1f5f9;color:var(--mute)}
+.sum div{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line)}.sum div:last-child{border:0}
+.big{display:flex;justify-content:space-between;align-items:center;background:var(--okb);color:var(--ok);border-radius:14px;padding:14px 16px;font-weight:800;font-size:18px;margin-top:10px}
+.bars{width:100%;height:auto}.bars .a{fill:#6366f1}.bars .b{fill:#22c55e}.bars text{font-size:10px;fill:var(--mute)}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--mute);margin-top:6px}.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.meter{height:10px;background:#eef1f7;border-radius:6px;overflow:hidden}.meter span{display:block;height:100%;background:var(--pri)}
+.calls{display:grid;gap:10px}
+.call{border:1px solid var(--line);border-radius:16px;padding:12px 14px;background:#fff}
+.call .top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.call .t{font-weight:800;font-size:16px}.call .who{font-weight:700}.call .meta{color:var(--mute);font-size:12px;margin-top:2px}
+.call .act{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.call .fb{white-space:pre-wrap;background:#f8fafc;border-radius:10px;padding:8px 10px;font-size:12px;margin-top:8px;color:#334155}
+.grp{font-weight:800;margin:18px 0 8px;display:flex;gap:8px;align-items:center}
+.tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}.tabs button[aria-pressed=true]{background:var(--pri);border-color:var(--pri);color:#fff}
+.note{background:var(--pri2);color:#3730a3;border-radius:12px;padding:10px 12px;font-size:12px;margin:10px 0}
+dialog{border:0;border-radius:18px;padding:20px;max-width:min(520px,94vw);width:100%;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+dialog::backdrop{background:rgba(15,23,42,.45)}dialog h3{margin:0 0 10px}dialog label{display:block;font-weight:600;font-size:12px;margin:10px 0 4px}
+dialog .row{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#0f172a;color:#fff;padding:10px 16px;border-radius:12px;z-index:50;max-width:92vw;box-shadow:var(--sh)}
+.center{min-height:100vh;display:grid;place-items:center;padding:20px}.center .card{max-width:460px;padding:24px}
+.foot2{display:flex;justify-content:space-between;color:var(--mute);font-size:11px;margin-top:8px;gap:10px;flex-wrap:wrap}
+@media (max-width:1100px){.tiles{grid-template-columns:repeat(3,1fr)}.itiles{grid-template-columns:repeat(2,1fr)}.grid3,.grid2{grid-template-columns:1fr}}
+@media (max-width:760px){
+ .app{display:block}main{padding:14px 12px 96px}
+ nav.side{position:fixed;bottom:0;top:auto;left:0;right:0;width:auto;height:auto;flex-direction:row;padding:6px;z-index:20;overflow-x:auto;border-radius:16px 16px 0 0}
+ nav.side .brand,nav.side .foot{display:none}nav.side a{flex:1 0 auto;flex-direction:column;gap:2px;font-size:11px;padding:8px 10px;text-align:center}
+ .head h1{font-size:21px}.tiles{grid-template-columns:repeat(2,1fr);padding:10px;gap:8px}.tile b{font-size:22px}
+ .itiles{grid-template-columns:1fr 1fr;gap:8px}.itiles .ic{display:none}
+ table.resp thead{display:none}table.resp tr{display:block;border-bottom:1px solid var(--line);padding:8px 0}table.resp td{display:flex;justify-content:space-between;gap:10px;border:0;padding:3px 4px}
+ table.resp td::before{content:attr(data-l);color:var(--mute);font-size:12px;font-weight:600}table.resp td.num{text-align:right}
+ .ctl{width:100%}.ctl>*{flex:1 1 140px}
+}
+</style>
+<script src="/api/config"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+</head>
+<body>
+<div id="root"></div>
+<script>
+/* core:start */
+/* Pure helpers (no page state): parsers for the Google Doc list, WhatsApp messages and the
+   Tool Drive list, matching, Indian Rupee format, months. Tested in portals/callpilots/test. */
+var CORE = (function () {
+  "use strict";
+  var MO = "jan feb mar apr may jun jul aug sep oct nov dec".split(" ");
+  var MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  var pad = function (n) { return String(n).padStart(2, "0"); };
+  var nm = function (s) { return String(s || "").toLowerCase().replace(/\s+/g, " ").trim(); };
+  var strip = function (s) { return String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\b(mr|mrs|ms|dr)\b\.?/g, " ").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim(); };
+  var nameKey = function (s) { return strip(s).split(" ").filter(Boolean).sort().join(" "); };
+  var tcase = function (s) { return String(s || "").replace(/\s+/g, " ").trim().replace(/(^|\s)(\S)/g, function (a, b, c) { return b + c.toUpperCase(); }); };
+
+  /* ₹ with Indian grouping: 1,23,456 */
+  function inr(n) {
+    var v = Math.round(Number(n) || 0), neg = v < 0; v = Math.abs(v);
+    var s = String(v), last3 = s.slice(-3), rest = s.slice(0, -3);
+    if (rest) last3 = rest.replace(/\B(?=(\d{2})+(?!\d))/g, ",") + "," + last3;
+    return (neg ? "-₹" : "₹") + last3;
+  }
+  function monthLabel(ym) { var p = String(ym || "").split("-"); return p.length < 2 ? "" : MONTHS[+p[1] - 1].slice(0, 3) + "-" + p[0]; }
+  function monthLong(ym) { var p = String(ym || "").split("-"); return p.length < 2 ? "" : MONTHS[+p[1] - 1] + " " + p[0]; }
+  function addDays(d, n) { var x = new Date(d + "T00:00:00Z"); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); }
+  /* India "list day": until 06:00 IST it is still the previous day's list */
+  function listToday(now) {
+    var t = new Date((now ? now.getTime() : Date.now()) + 5.5 * 3600e3 - 6 * 3600e3);
+    return t.toISOString().slice(0, 10);
+  }
+  function time12(t) {
+    if (!t) return "TBD";
+    var p = String(t).split(":"), h = +p[0], m = p[1] || "00";
+    return (h % 12 || 12) + ":" + m + " " + (h < 12 ? "AM" : "PM");
+  }
+
+  /* ---------- Google Doc daily list (same rules as TTOP's "Import from Google Doc") ----------
+     Lines:  Name (UK)(Role) – Interview – Client – 4:00 PM IST – Duration: 60 Mins (2nd Round)-gopi
+     Headings like "October 5, 2026 (Monday)" set the date. */
+  var TR = /(\d{1,2})(?:\s*[:.]\s*(\d{2}))?\s*([ap])\.?m\b/i;
+  var CT = /^\(?(uk|ireland|us|usa|canada|australia|uae|india)\)?$/i;
+  var norm = function (l) {
+    return l.replace(/\)\s*-(?=[^\s-])/g, ") - ").replace(/([A-Za-z])-(?=\s*\d{1,2}(?::\d{2}|\s*[ap]\.?m\b))/gi, "$1 - ")
+      .replace(/([^\s-])-[ \t]+(?=\S)/g, "$1 - ").replace(/(\s)-(?=[^\s-])/g, " - ").replace(/[ \t]{2,}/g, " ");
+  };
+  function parseDocList(text, opt) {
+    opt = opt || {};
+    var today = opt.today || listToday(), names = ["gopi","pavan","kumar","kishore","vamsi","dilip","karthik"].concat((opt.pocNames || []).map(function (n) { return String(n).split(" ")[0].toLowerCase(); }))
+      .filter(function (v, i, a) { return v && a.indexOf(v) === i; });
+    var pocFull = opt.pocNames || [];
+    var tre = new RegExp("(?:^|[^a-z])(" + names.join("|") + ")(?![a-z])", "i"), sep = "\\s*(?:[–—-]{2,}|[–—]|\\s-\\s)\\s*";
+    var rows = [], seen = {}, skipped = [], merged = 0, date = opt.date || today;
+    String(text || "").split("\n").forEach(function (ln) {
+      var org = ln;
+      ln = ln.replace(/^\s*\d{1,3}\s*[.)]?\s*\t\s*/, "").replace(/^\s*\d{1,3}\s*[.)]\s+/, "").replace(/^\s*\d{1,3}\s{2,}(?=\S)/, "").trim();
+      ln = norm(ln);
+      var iv = /interview/i.test(ln) || (/\b(phn|phone|phonecall|call)\b/i.test(ln) && (TR.test(ln) || /waiting|invite|round|duration/i.test(ln)));
+      var hd = /^([a-z]{3})[a-z]*\s+(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{4})?/i.exec(ln);
+      if (hd && !iv && MO.indexOf(hd[1].toLowerCase()) >= 0) { date = (hd[3] || today.slice(0, 4)) + "-" + pad(MO.indexOf(hd[1].toLowerCase()) + 1) + "-" + pad(+hd[2]); return; }
+      var m = new RegExp(sep).exec(ln);
+      if (!iv || !m) { if (/^\s*\d{1,3}\b/.test(org) && ln.length > 3) skipped.push(org.trim()); return; }
+      var s0 = ln.slice(0, m.index), rest = ln.slice(m.index + m[0].length);
+      var par = Array.from(s0.matchAll(/\(([^)]*)\)/g)).map(function (x) { return x[1].trim(); });
+      var c2 = rest.split(new RegExp(sep)).map(function (x) { return x.replace(/\(.*$/, "").replace(/\s+/g, " ").trim(); }).find(function (x) {
+        return x && !/interview/i.test(x) && !/^(?:phn|phone)?\s*(?:call|interview)s?$/i.test(x) && !/^phn\b/i.test(x) && !CT.test(x) && !TR.test(x) && !/^duration|round/i.test(x);
+      }) || "";
+      var client = c2 === c2.toLowerCase() ? tcase(c2) : c2;
+      var tt = TR.exec(rest), hr = /(\d+(?:\.\d+)?)\s*(?:hrs?|hours?)\b/i.exec(rest), mn = /(\d+)\s*min/i.exec(rest), mins = (hr ? hr[1] * 60 : 0) + (mn ? +mn[1] : 0);
+      var rdm = /(\d)\s*(?:st|nd|rd|th)?\s*round/i.exec(rest);
+      var round = /final/i.test(rest) ? "Final" : /\bloop\b/i.test(rest) ? "Loop" : rdm ? "Round " + rdm[1] : "";
+      var tdm = tre.exec(rest);
+      var notes = tdm ? rest.slice(tdm.index + tdm[0].length).replace(/\d{1,2}\/\d{1,2}(\/\d{2,4})?/g, "").replace(/^[\s>\-–—→]+|[\s>\-–—→]+$/g, "").trim() : "";
+      var type = /\bon\s*-?site/i.test(rest) ? "Onsite" : /coding/i.test(rest) ? "Coding" : /system design/i.test(rest) ? "System Design" : /technical/i.test(rest) ? "Technical"
+        : /director/i.test(rest) ? "Director" : /\b(vp|cto|ceo|head|leadership)\b/i.test(rest) ? "Leadership" : /manager|panel/i.test(rest) ? "Hiring Manager" : "Technical";
+      var pcs = ln.split(new RegExp(sep)).map(function (x) { return x.trim(); });
+      var isCall = pcs.some(function (x) { return /^(?:phn|phone)?\s*call$/i.test(x) || /^(?:phn|phone)\b/i.test(x); });
+      var extra = Array.from(rest.matchAll(/\(([^)]*)\)/g)).map(function (x) { return x[1].trim(); })
+        .filter(function (x) { return x && !/round|^(?:loop|final)$|^\d+\s*mins?\b/i.test(x) && !/^el[ao]bor/i.test(x) && !CT.test(x); });
+      var time = "";
+      if (tt) { var h = +tt[1], ap = tt[3].toLowerCase(); if (ap === "p" && h < 12) h += 12; if (ap === "a" && h === 12) h = 0; time = pad(h) + ":" + (tt[2] || "00"); }
+      var poc = "";
+      if (tdm) { var f = tdm[1].toLowerCase(), full = pocFull.filter(function (n) { return String(n).split(" ")[0].toLowerCase() === f; }); poc = full.length === 1 ? full[0] : tcase(tdm[1]); }
+      var r = {
+        cand: tcase(s0.replace(/\(.*$/, "").replace(/[\s-]*(?:phn\s*|phone\s*)?interview\w*\s*$/i, "").replace(/[\s-]+$/, "")),
+        role: par.find(function (x) { return !CT.test(x); }) || "", loc: par.find(function (x) { return CT.test(x); }) || "",
+        client: client, date: date, time: time, dur: mins || 60, round: round || "Round 1", roundGiven: !!round, type: type,
+        tech: /\btechnical\b/i.test(rest) && (round || "Round 1") === "Round 1", poc: poc,
+        notes: [notes, isCall ? "Phone call" : ""].concat(extra).filter(Boolean).join(" · ")
+      };
+      var k = nm(r.cand) + "|" + nm(r.client) + "|" + date + "|" + time;
+      if (seen[k]) { merged++; var o = seen[k]; if (!o.poc) o.poc = r.poc; if (!o.notes) o.notes = r.notes; if (r.tech) o.tech = true; }
+      else { seen[k] = r; rows.push(r); }
+    });
+    return { rows: rows, skipped: skipped, merged: merged };
+  }
+
+  /* ---------- WhatsApp message -> Doc-style lines ----------
+     Accepts text copied from WhatsApp or from "Export chat":
+       [10:42 am, 25/11/2026] Name: line          25/11/2026, 10:42 - Name: line
+     *bold* _italic_ ~strike~ markers are removed; numbered lines are fine;
+     date lines like "25 Nov 2026", "*25/11/2026*" or "Nov 25" become date headings. */
+  function whatsappToDoc(text) {
+    var out = [];
+    String(text || "").replace(/\r/g, "").split("\n").forEach(function (ln) {
+      var s = ln.replace(/‎|‏|‪|‬/g, "");
+      s = s.replace(/^\s*\[\d{1,2}[:.]\d{2}(?:[:.]\d{2})?\s*(?:[ap]\.?\s?m\.?)?,\s*\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}\]\s*[^:]{1,60}:\s*/i, "");
+      s = s.replace(/^\s*\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4},?\s+\d{1,2}[:.]\d{2}(?:\s*[ap]\.?\s?m\.?)?\s+-\s+[^:]{1,60}:\s*/i, "");
+      s = s.replace(/(^|[\s(])[*_~]+(?=\S)/g, "$1").replace(/(\S)[*_~]+(?=[\s),.:;!?]|$)/g, "$1").trim();
+      if (!s || /^<media omitted>$|^this message was deleted$|^you deleted this message$/i.test(s)) return;
+      if (!/interview|\bcall\b|round/i.test(s)) {
+        var a = /^(?:[a-z]+day,?\s+)?(\d{1,2})(?:st|nd|rd|th)?\s+([a-z]{3})[a-z]*,?\s*(\d{4})?\b/i.exec(s);
+        if (a && MO.indexOf(a[2].toLowerCase()) >= 0) { s = tcase(a[2].slice(0, 3)) + " " + (+a[1]) + (a[3] ? ", " + a[3] : ""); }
+        var b = /^(?:[a-z]+day,?\s+)?(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})\s*(?:\([a-z]+\))?$/i.exec(s);
+        if (b) { var y = b[3].length === 2 ? "20" + b[3] : b[3]; s = tcase(MO[+b[2] - 1]) + " " + (+b[1]) + ", " + y; }
+      }
+      out.push(s);
+    });
+    return out.join("\n");
+  }
+
+  /* ---------- Tool Drive list (same rules as TTOP's "Tool Drive list") ----------
+     Each line: Candidate (UK) - 1:30 (*Tool Drive name*). Times have no AM/PM: the day runs
+     from noon to 6 AM and the list is in order, so 12:30 after 11:30 is after midnight.
+     A heading line (*HYD Team*) is the fallback Tool Drive for lines without a name. */
+  function tdRes(h, m, ap, prev) {
+    h = +h; m = +m;
+    if (ap) { var H = h % 12 + (/p/i.test(ap) ? 12 : 0), t = H * 60 + m; return H < 6 ? t + 1440 : t; }
+    var c = [(h % 12 + 12) * 60 + m, (h % 12) * 60 + m + 1440].filter(function (x) { return x >= 720 && x < 1800; }), p = prev == null ? 0 : prev;
+    var ok = c.filter(function (x) { return x >= p; });
+    return ok.length ? Math.min.apply(null, ok) : Math.max.apply(null, c);
+  }
+  var tdTm = function (t) { return pad(Math.floor(t / 60) % 24) + ":" + pad(t % 60); };
+  function parseToolDriveList(txt) {
+    var out = [], grp = "", prev = null;
+    String(txt || "").split(/\r?\n/).forEach(function (raw) {
+      var s = raw.replace(/\t/g, " ").replace(/^\s*(?:\d+[.)]\s+|[-•]\s+)/, "").trim();
+      if (!s) return;
+      var t = /\s*[-–—]\s*(\d{1,2}):(\d{2})\s*(am|pm)?/i.exec(s);
+      if (!t) { var h = s.replace(/[*_]/g, "").trim(); if (h && !/\d/.test(h)) { grp = h; prev = null; } return; }
+      var tags = Array.from(s.matchAll(/\(\*([^)]*?)\*\)/g)).map(function (x) { return x[1].trim(); }).filter(Boolean);
+      var isF = function (x) { return /candidate|1st|first|interview/i.test(x); };
+      var name = s.slice(0, t.index).replace(/\([^)]*\)/g, " ").replace(/[*_]/g, "").replace(/\s+/g, " ").trim();
+      var min = tdRes(t[1], t[2], t[3], prev); prev = Math.max(prev == null ? 0 : prev, min);
+      if (name) out.push({ name: name, time: tdTm(min), tool: tags.filter(function (x) { return !isF(x); })[0] || "", first: tags.some(isF), grp: grp });
+    });
+    var mg = [];
+    out.forEach(function (e) { var o = mg.find(function (x) { return nm(x.name) === nm(e.name) && x.time === e.time; }); if (o) { if (!o.tool) o.tool = e.tool; } else mg.push(e); });
+    return mg;
+  }
+
+  /* Team member for a name: exact full name, else a first name only one member has (never guessed). */
+  function findMember(name, members) {
+    var n = nm(name); if (!n) return null;
+    var ex = (members || []).filter(function (m) { return nm(m.name) === n; });
+    if (ex.length === 1) return ex[0];
+    if (ex.length > 1 || n.indexOf(" ") >= 0) return null;
+    var fn = (members || []).filter(function (m) { return nm(String(m.name).split(" ")[0]) === n; });
+    return fn.length === 1 ? fn[0] : null;
+  }
+  /* A team heading (*HYD Team*) -> the Call Pilots team it names, if any. */
+  function teamOf(heading, teams) {
+    var h = nm(String(heading || "").replace(/\bteam\b/i, ""));
+    return (teams || []).find(function (t) { var k = nm(String(t).replace(/\bteam\b/i, "")); return k && (h === k || h.indexOf(k) >= 0 || k.indexOf(h) >= 0); }) || "";
+  }
+
+  /* Match Tool Drive list lines to the day's interviews (calls from cp_day_calls). */
+  function matchToolDrive(entries, calls, members, teamLeads) {
+    return (entries || []).map(function (e, k) {
+      var r = { k: k, e: e, call: null, member: null, fromTeam: false, ok: false, msg: "" };
+      var key = nameKey(e.name);
+      var mine = (calls || []).filter(function (c) { var ck = nameKey(c.candidate); return ck === key || (key && (ck.indexOf(key) === 0 || key.indexOf(ck) === 0)); });
+      var at = mine.filter(function (c) { return c.time === e.time; });
+      if (at.length > 1) { r.msg = "Several interviews at this time: " + at.map(function (c) { return c.client; }).join(", "); return r; }
+      if (at.length === 1) r.call = at[0];
+      else if (mine.length === 1) { r.call = mine[0]; r.msg = "Time differs (portal " + time12(mine[0].time) + ")"; }
+      else { r.msg = mine.length ? "No interview at this time" : "No interview for this candidate on this date"; return r; }
+      if (e.tool) {
+        r.member = findMember(e.tool, members);
+        if (!r.member) { r.msg = (r.msg ? r.msg + ". " : "") + "“" + e.tool + "” is not one team member (unknown, or two people share the first name)"; return r; }
+      } else {
+        // the heading itself may be a team row (TTOP keeps names like "HYD Team" as Tool Drives), else the chosen lead
+        var lead = e.grp ? (findMember(e.grp, members) || (teamLeads ? teamLeads[teamOf(e.grp, Object.keys(teamLeads))] : null)) : null;
+        if (!lead) { r.msg = (r.msg ? r.msg + ". " : "") + "No Tool Drive name" + (e.grp ? " and no lead set for team “" + e.grp + "”" : ""); return r; }
+        if (r.call.toolDriveMemberId || r.call.toolDrive) { r.msg = (r.msg ? r.msg + ". " : "") + "Already has " + (r.call.toolDrive || "a Tool Drive") + "; team heading not applied"; return r; }
+        r.member = lead; r.fromTeam = true;
+      }
+      if (r.call.toolDriveMemberId === r.member.id) { r.msg = "Already set"; r.same = true; return r; }
+      r.ok = !r.msg || /^Time differs/.test(r.msg);
+      r.msg = [r.msg, r.fromTeam ? "From team heading" : "", r.call.toolDrive ? "Replaces " + r.call.toolDrive : ""].filter(Boolean).join(". ");
+      return r;
+    });
+  }
+
+  /* Calls grouped for "My calls" */
+  function groupCalls(calls) {
+    var g = { today: [], tomorrow: [], week: [], notUpdated: [] };
+    (calls || []).forEach(function (c) { if (g[c.group]) g[c.group].push(c); });
+    return g;
+  }
+
+  return { pad: pad, nm: nm, nameKey: nameKey, tcase: tcase, inr: inr, monthLabel: monthLabel, monthLong: monthLong, addDays: addDays,
+    listToday: listToday, time12: time12, parseDocList: parseDocList, whatsappToDoc: whatsappToDoc, parseToolDriveList: parseToolDriveList,
+    tdRes: tdRes, findMember: findMember, teamOf: teamOf, matchToolDrive: matchToolDrive, groupCalls: groupCalls };
+})();
+/* core:end */
+</script>
+<script>
+(function () {
+  "use strict";
+  var C = CORE, $root = document.getElementById("root");
+  var SB, ME = null, MEMBERS = null, STATE = { month: "", team: "", member: "" }, GEN = 0;
+  var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); };
+  var nf = function (n) { return Number(n || 0).toLocaleString("en-IN"); };
+  var guard = function (fn) { var g = GEN; return function (x) { if (g === GEN) return fn(x); }; };
+  function toast(msg) { var t = document.createElement("div"); t.className = "toast"; t.textContent = msg; document.body.appendChild(t); setTimeout(function () { t.remove(); }, 3500); }
+  function rpc(fn, args) {
+    return SB.rpc(fn, args || {}).then(function (r) { if (r.error) throw new Error(r.error.message); return r.data; });
+  }
+  var PAGES = [
+    ["dashboard", "▦", "Dashboard", false], ["incentives", "₹", "Incentives", false], ["calls", "☎", "My calls", false],
+    ["add", "＋", "Add Interviews", true], ["assign", "⇄", "Assign Interviews", true]
+  ];
+
+  /* ---------------- start ---------------- */
+  function boot() {
+    var c = window.TTOP_CONFIG || {};
+    if (!c.url || !c.anon) return message("Not configured", "The server has no Supabase settings.");
+    SB = supabase.createClient(c.url, c.anon);
+    SB.auth.getSession().then(function (r) {
+      if (!r.data || !r.data.session) { location.href = "/?next=" + encodeURIComponent("/callpilots/" + location.hash); return; }
+      return rpc("cp_me").then(function (me) {
+        ME = me;
+        STATE.month = (me.months || [])[0] || C.listToday().slice(0, 7);
+        window.addEventListener("hashchange", route);
+        route();
+      }).catch(function (e) {
+        message("No access to Call Pilots", /no Call Pilots access/i.test(e.message)
+          ? "You are signed in, but Call Pilots is not ticked for you. Ask an admin to give you access on the People page."
+          : e.message);
+      });
+    });
+  }
+  function message(title, text) {
+    $root.innerHTML = '<div class="center"><div class="card"><h2 style="margin-top:0">' + esc(title) + '</h2><p class="muted">' + esc(text) + '</p><p><a href="/">Back to the home page</a></p></div></div>';
+  }
+  function page() { var h = location.hash.replace("#", ""); var p = PAGES.find(function (x) { return x[0] === h && (!x[3] || ME.isAdmin); }); return p ? p[0] : "dashboard"; }
+  function route() {
+    GEN++;
+    var cur = page();
+    var nav = '<nav class="side"><div class="brand"><i>🏆</i><div><b>Call Pilots Operations Portal</b><small>' + esc(ME.isAdmin ? "Admin access" : "Handler access") + '</small></div></div>' +
+      PAGES.filter(function (p) { return !p[3] || ME.isAdmin; }).map(function (p) { return '<a href="#' + p[0] + '" class="' + (p[0] === cur ? "on" : "") + '"><span>' + p[1] + '</span>' + p[2] + '</a>'; }).join("") +
+      '<div class="foot">' + esc(ME.name) + (ME.team ? " · " + esc(ME.team) : "") + '<br><a href="/">Home</a> · <a href="/?signout=1">Sign out</a></div></nav>';
+    $root.innerHTML = '<div class="app">' + nav + '<main id="main"></main></div>';
+    ({ dashboard: pDashboard, incentives: pIncentives, calls: pCalls, add: pAdd, assign: pAssign })[cur]();
+    window.scrollTo(0, 0);
+  }
+  var main = function () { return document.getElementById("main"); };
+  function loading(title, sub) { main().innerHTML = head(title, sub, "") + '<div class="card"><div class="empty">Loading…</div></div>'; }
+  function fail(e) { main().insertAdjacentHTML("beforeend", '<div class="card"><div class="cb err">' + esc(e.message) + '</div></div>'); }
+  function head(title, sub, ctl) { return '<div class="head"><div><h1>' + title + '</h1><p>' + sub + '</p></div><div class="ctl">' + (ctl || "") + '</div></div>'; }
+  function members() { return MEMBERS ? Promise.resolve(MEMBERS) : rpc("cp_members").then(function (m) { MEMBERS = m; return m; }); }
+
+  /* month / team / handler pickers */
+  function monthSel() {
+    return '<select id="f_month" aria-label="Month">' + (ME.months || []).map(function (m) { return '<option value="' + m + '"' + (m === STATE.month ? " selected" : "") + '>📅 ' + C.monthLabel(m) + '</option>'; }).join("") + '</select>';
+  }
+  function scopeSel(list) {
+    if (!ME.isAdmin) return "";
+    var cp = (list || []).filter(function (m) { return m.isCallPilot && (!STATE.team || m.team === STATE.team); });
+    return '<select id="f_team" aria-label="Team"><option value="">All teams</option>' + (ME.teams || []).map(function (t) { return '<option' + (t === STATE.team ? " selected" : "") + '>' + esc(t) + '</option>'; }).join("") + '</select>' +
+      '<select id="f_member" aria-label="Handler"><option value="">All handlers</option>' + cp.map(function (m) { return '<option value="' + m.id + '"' + (String(m.id) === String(STATE.member) ? " selected" : "") + '>' + esc(m.name) + '</option>'; }).join("") + '</select>';
+  }
+  function bindScope(redraw) {
+    var f = function (id, k) { var e = document.getElementById(id); if (e) e.onchange = function () { STATE[k] = e.value; if (k === "team") STATE.member = ""; redraw(); }; };
+    f("f_month", "month"); f("f_team", "team"); f("f_member", "member");
+  }
+  var scopeArgs = function () { return { p_month: STATE.month + "-01", p_member: STATE.member ? Number(STATE.member) : null, p_team: STATE.team || null }; };
+
+  /* ---------------- 1. Dashboard ---------------- */
+  function pDashboard() {
+    loading(ME.isAdmin ? "Call Pilots Dashboard" : "Welcome back, " + esc(ME.name) + " 👋", "Calls, interviews and incentive overview");
+    Promise.all([rpc("cp_dashboard", scopeArgs()), ME.isAdmin ? members() : Promise.resolve([])]).then(guard(function (r) {
+      var d = r[0], c = d.calls, inc = d.incentives, who = ME.isAdmin ? (STATE.member ? "Selected handler" : STATE.team || "All teams") : "Your";
+      var h = head(ME.isAdmin ? "Call Pilots Dashboard" : "Welcome back, " + esc(ME.name) + " 👋", who + " calls, interviews and incentive overview", scopeSel(r[1]) + monthSel());
+      var tile = function (label, v, sub, cls) { return '<div class="tile ' + (cls || "") + '"><span>' + label + '</span><b>' + v + '</b><small>' + sub + '</small></div>'; };
+      h += '<div class="card"><div class="ch"><div><b>' + (ME.isAdmin ? "Call Operations" : "My Call Operations") + '</b><small>Today: ' + nf(d.today.assigned) + ' assigned • ' + nf(d.today.completed) + ' completed • ' + C.monthLong(d.month) + '</small></div><span class="pill">Tool Drive</span></div>' +
+        '<div class="tiles">' + tile("Assigned", nf(c.assigned), "Selected month") + tile("Completed", nf(c.completed), "Completed calls") +
+        tile("Pending", nf(c.pending), "Not updated yet", c.pending ? "warn" : "") + tile("Rescheduled", nf(c.rescheduled), "Moved to a new date") +
+        tile("Cancelled", nf(c.cancelled), "Final outcome") + tile("Support", nf(c.support), "Calls as Call Support") + '</div>' +
+        (c.rescheduleRequests ? '<div class="cb"><span class="pill w">' + nf(c.rescheduleRequests) + ' reschedule request' + (c.rescheduleRequests === 1 ? "" : "s") + ' waiting for an admin</span></div>' : '') + '</div>';
+
+      var prev = function (v) { return inc.prevTotal ? (v >= inc.prevTotal ? "▲ " : "▼ ") + C.inr(Math.abs(v - inc.prevTotal)) + " vs last month" : "No prior month"; };
+      var it = function (ic, bg, label, v, sub) { return '<div class="tile"><div class="ic" style="background:' + bg + '">' + ic + '</div><div><span>' + label + '</span><b>' + v + '</b><small>' + sub + '</small></div></div>'; };
+      h += '<div class="head" style="margin-top:6px"><div><h1 style="font-size:20px">Incentive Dashboard</h1><p>Monthly incentive performance, promotions and selections</p></div></div>' +
+        '<div class="itiles">' + it("₹", "#e8f7ee", "Total Incentive", C.inr(inc.total), prev(inc.total)) + it("📣", "#eaf1ff", "Promotion Incentive", C.inr(inc.promotion), nf(inc.promotions) + " round promotions") +
+        it("👥", "#f1ecff", "Selection Incentive", C.inr(inc.selection), "Placed candidates") + it("✔", "#fff4e0", "Paid", C.inr(inc.paid), C.inr(inc.waiting) + " not paid yet") +
+        it("🏆", "#fdf0e3", "Incentive Records", nf(inc.records), "This month") + '</div>';
+
+      var max = Math.max.apply(null, d.trend.map(function (t) { return Number(t.total); }).concat([1]));
+      var W = 34, H = 120, svg = '<svg class="bars" viewBox="0 0 ' + (d.trend.length * W) + ' ' + (H + 18) + '" role="img" aria-label="Incentive per month, last 12 months">';
+      d.trend.forEach(function (t, i) {
+        var ph = Math.round(Number(t.promotion) / max * H), sh = Math.round(Number(t.selection) / max * H), x = i * W + 7, w = W - 14;
+        svg += '<g><title>' + C.monthLabel(t.month) + ': ' + C.inr(t.total) + '</title>' +
+          (ph ? '<rect class="a" x="' + x + '" y="' + (H - ph) + '" width="' + w + '" height="' + ph + '" rx="3"/>' : '') +
+          (sh ? '<rect class="b" x="' + x + '" y="' + (H - ph - sh) + '" width="' + w + '" height="' + sh + '" rx="3"/>' : '') +
+          '<text x="' + (i * W + W / 2) + '" y="' + (H + 13) + '" text-anchor="middle">' + C.monthLabel(t.month).slice(0, 3) + '</text></g>';
+      });
+      svg += '</svg>';
+      var anyTrend = d.trend.some(function (t) { return Number(t.total) > 0; });
+      var split = [["Promotion", inc.promotion, "#6366f1"], ["Selection", inc.selection, "#22c55e"], ["Candidate POC", inc.candidatePoc, "#f59e0b"]];
+      var stot = split.reduce(function (a, s) { return a + Number(s[1]); }, 0);
+      h += '<div class="grid3"><div class="card"><div class="ch"><div><b>Monthly Incentive Trend</b><small>Promotion and selection incentive, last 12 months</small></div></div><div class="cb">' +
+        (anyTrend ? svg + '<div class="legend"><span><i style="background:#6366f1"></i>Promotion</span><span><i style="background:#22c55e"></i>Selection</span></div>' : '<div class="empty">No incentives in the last 12 months.</div>') + '</div></div>' +
+        '<div class="card"><div class="ch"><div><b>Incentive Split</b><small>' + C.monthLong(d.month) + '</small></div></div><div class="cb">' +
+        (stot ? split.map(function (s) { return '<div style="margin:6px 0 12px"><div style="display:flex;justify-content:space-between"><span>' + s[0] + '</span><b>' + C.inr(s[1]) + '</b></div><div class="meter"><span style="width:' + Math.round(Number(s[1]) / stot * 100) + '%;background:' + s[2] + '"></span></div></div>'; }).join("") : '<div class="empty">No incentive split for this month.</div>') + '</div></div>' +
+        '<div class="card"><div class="ch"><div><b>Month Summary (' + C.monthLabel(d.month) + ')</b></div></div><div class="cb sum">' +
+        '<div><span>Total Incentive</span><b>' + C.inr(inc.total) + '</b></div><div><span>Promotion Incentive</span><b>' + C.inr(inc.promotion) + '</b></div>' +
+        '<div><span>Selection Incentive</span><b>' + C.inr(inc.selection) + '</b></div><div><span>Promotions</span><b>' + nf(inc.promotions) + '</b></div>' +
+        '<div><span>Incentive Records</span><b>' + nf(inc.records) + '</b></div><div class="big"><span>' + C.monthLabel(d.month) + '</span><span>' + C.inr(inc.total) + '</span></div></div></div></div>';
+
+      h += '<div class="grid2"><div class="card"><div class="ch"><div><b>Recent Activity</b><small>Incentives in ' + C.monthLong(d.month) + '</small></div><a href="#incentives">See all</a></div><div class="cb">' +
+        (d.recent.length ? '<table class="resp"><tbody>' + d.recent.map(function (x) {
+          return '<tr><td data-l="Date" class="muted">' + esc(x.date) + '</td><td data-l="Candidate"><b>' + esc(x.candidate) + '</b><div class="muted">' + esc(x.client) + ' · ' + esc(x.round) + (ME.isAdmin && x.handler ? ' · ' + esc(x.handler) : '') + '</div></td><td data-l="Type">' + esc(x.kind) + '</td><td data-l="Amount" class="num">' + C.inr(x.amount) + '<div><span class="pill ' + esc(String(x.status).split(" ")[0]) + '">' + esc(x.status) + '</span></div></td></tr>';
+        }).join("") + '</tbody></table>' : '<div class="empty">No incentive activity this month.</div>') + '</div></div>';
+      if (ME.isAdmin && d.byHandler) {
+        var hm = Math.max.apply(null, d.byHandler.map(function (x) { return Number(x.amount); }).concat([1]));
+        h += '<div class="card"><div class="ch"><div><b>Handlers</b><small>Calls and incentive in ' + C.monthLong(d.month) + '</small></div></div><div class="cb scroll">' +
+          (d.byHandler.length ? '<table class="resp"><thead><tr><th>Handler</th><th class="num">Calls</th><th class="num">Done</th><th>Incentive</th></tr></thead><tbody>' + d.byHandler.map(function (x) {
+            return '<tr><td data-l="Handler"><b>' + esc(x.handler) + '</b><div class="muted">' + esc(x.team || "") + '</div></td><td data-l="Calls" class="num">' + nf(x.assigned) + '</td><td data-l="Done" class="num">' + nf(x.completed) + '</td><td data-l="Incentive"><div class="meter"><span style="width:' + Math.round(Number(x.amount) / hm * 100) + '%"></span></div><small>' + C.inr(x.amount) + '</small></td></tr>';
+          }).join("") + '</tbody></table>' : '<div class="empty">No Call Pilots handlers' + (STATE.team ? " in " + esc(STATE.team) : "") + ' yet.</div>') + '</div></div>';
+      } else {
+        h += '<div class="card"><div class="ch"><div><b>Quick Insights</b><small>' + C.monthLong(d.month) + '</small></div></div><div class="cb sum">' +
+          '<div><span>Top incentive type</span><b>' + (inc.selection > inc.promotion ? "Selection" : inc.promotion ? "Promotion" : "—") + '</b></div>' +
+          '<div><span>Calls completed</span><b>' + nf(c.completed) + ' of ' + nf(c.assigned) + '</b></div>' +
+          '<div><span>Not paid yet</span><b>' + C.inr(inc.waiting) + '</b></div></div></div>';
+      }
+      h += '</div><div class="foot2"><span>' + (ME.isAdmin ? "Admin access: all handlers." : "Personal access: only your calls and incentives are shown.") + '</span><span>All amounts are in Indian Rupees (₹)</span></div>';
+      main().innerHTML = h;
+      bindScope(pDashboard);
+    })).catch(guard(fail));
+  }
+
+  /* ---------------- 2. Incentives ---------------- */
+  var IF = { q: "", kind: "", status: "" };
+  function pIncentives() {
+    loading(ME.isAdmin ? "Incentives" : "My Incentives", "Detailed incentive records for the selected month");
+    Promise.all([rpc("cp_incentives", Object.assign(scopeArgs(), { p_kind: null, p_status: null, p_search: null })), ME.isAdmin ? members() : Promise.resolve([])]).then(guard(function (r) {
+      var all = r[0];
+      var h = head(ME.isAdmin ? "Incentives" : "My Incentives", "Detailed incentive records for the selected month", scopeSel(r[1]) + monthSel());
+      var kinds = ["Promotion", "Selection", "Candidate POC"], sts = ["Paid", "Pending", "Pending approval", "Waiting for closer list", "Not in closer list", "Rejected"];
+      h += '<div class="card"><div class="ch"><div><b>' + (ME.isAdmin ? "Incentives" : "My Incentives") + '</b><small>' + C.monthLong(STATE.month) + ' · detailed incentive records</small></div></div>' +
+        '<div class="cb ctl"><input type="search" id="i_q" placeholder="Search candidate, client or handler…" value="' + esc(IF.q) + '" style="flex:3 1 220px">' +
+        '<select id="i_k"><option value="">All incentive types</option>' + kinds.map(function (k) { return '<option' + (k === IF.kind ? " selected" : "") + '>' + k + '</option>'; }).join("") + '</select>' +
+        '<select id="i_s"><option value="">All statuses</option>' + sts.map(function (k) { return '<option' + (k === IF.status ? " selected" : "") + '>' + k + '</option>'; }).join("") + '</select>' +
+        '<button id="i_c">Clear filters</button></div><div class="cb" style="padding-top:0"><div id="i_n" class="muted" style="font-size:12px"></div><div id="i_t" class="scroll"></div></div></div>' +
+        '<div class="note">“Waiting for closer list”: a selection incentive is paid only after the candidate is on the month\'s closer list. “Pending approval”: an admin is checking a change.</div>' +
+        '<div class="foot2"><span>' + (ME.isAdmin ? "Admin access: all handlers." : "Personal access: only your incentive records are shown.") + '</span><span>All amounts are in Indian Rupees (₹)</span></div>';
+      main().innerHTML = h;
+      var draw = function () {
+        var q = IF.q.toLowerCase().trim();
+        var L = all.filter(function (x) { return (!IF.kind || x.kind === IF.kind) && (!IF.status || x.status === IF.status) && (!q || [x.candidate, x.client, x.handler].join(" ").toLowerCase().indexOf(q) >= 0); });
+        var tot = L.reduce(function (a, x) { return a + (x.status === "Rejected" ? 0 : Number(x.amount)); }, 0);
+        document.getElementById("i_n").textContent = L.length + " record" + (L.length === 1 ? "" : "s") + " shown · " + C.inr(tot);
+        document.getElementById("i_t").innerHTML = L.length ? '<table class="resp"><thead><tr><th>Date</th><th>Candidate</th><th>Client</th><th>Round</th><th>Type</th>' + (ME.isAdmin ? '<th>Handler</th>' : '') + '<th class="num">Amount</th><th>Status</th></tr></thead><tbody>' +
+          L.map(function (x) {
+            return '<tr><td data-l="Date" class="muted">' + esc(x.date) + '</td><td data-l="Candidate"><b>' + esc(x.candidate) + '</b></td><td data-l="Client">' + esc(x.client) + '</td><td data-l="Round">' + esc(x.round) + '</td><td data-l="Type">' + esc(x.kind) + '</td>' +
+              (ME.isAdmin ? '<td data-l="Handler">' + esc(x.handler) + (x.team ? '<div class="muted">' + esc(x.team) + '</div>' : '') + '</td>' : '') +
+              '<td data-l="Amount" class="num"><b>' + C.inr(x.amount) + '</b></td><td data-l="Status"><span class="pill ' + esc(String(x.status).split(" ")[0]) + '">' + esc(x.status) + '</span></td></tr>';
+          }).join("") + '</tbody></table>' : '<div class="empty">No incentive records match the selected filters.</div>';
+      };
+      draw();
+      var q = document.getElementById("i_q"), t;
+      q.oninput = function () { IF.q = q.value; clearTimeout(t); t = setTimeout(draw, 120); };
+      document.getElementById("i_k").onchange = function () { IF.kind = this.value; draw(); };
+      document.getElementById("i_s").onchange = function () { IF.status = this.value; draw(); };
+      document.getElementById("i_c").onclick = function () { IF = { q: "", kind: "", status: "" }; pIncentives(); };
+      bindScope(pIncentives);
+    })).catch(guard(fail));
+  }
+
+  /* ---------------- 3. My calls ---------------- */
+  function pCalls() {
+    var title = "My Calls", sub = "Calls where you are the Tool Drive or Call Support";
+    loading(title, sub);
+    Promise.all([rpc("cp_my_calls", { p_member: ME.isAdmin && STATE.member ? Number(STATE.member) : null }), ME.isAdmin ? members() : Promise.resolve([])]).then(guard(function (r) {
+      var d = r[0], g = C.groupCalls(d.calls);
+      var ctl = ME.isAdmin ? '<select id="c_m" aria-label="Handler"><option value="">' + (ME.memberId ? "My calls" : "Choose a handler") + '</option>' +
+        r[1].filter(function (m) { return m.isCallPilot; }).map(function (m) { return '<option value="' + m.id + '"' + (String(m.id) === String(STATE.member) ? " selected" : "") + '>' + esc(m.name) + (m.team ? " · " + esc(m.team) : "") + '</option>'; }).join("") + '</select>' : '';
+      var h = head(title, sub, ctl + '<button id="c_r">Refresh</button>');
+      if (!d.memberId) h += '<div class="card"><div class="empty">' + (ME.isAdmin ? "Choose a handler to see their calls." : "Your login is not linked to a team member yet. Ask an admin to add your email on TTOP's Team page.") + '</div></div>';
+      else {
+        var sec = function (key, label, hint) {
+          var L = g[key];
+          return '<div class="grp">' + label + ' <span class="pill' + (key === "notUpdated" && L.length ? " w" : "") + '">' + L.length + '</span>' + (hint ? '<small class="muted" style="font-weight:400">' + hint + '</small>' : '') + '</div>' +
+            (L.length ? '<div class="calls">' + L.map(callCard).join("") + '</div>' : '<div class="muted" style="font-size:13px">Nothing here.</div>');
+        };
+        h += '<div class="card"><div class="cb">' + sec("today", "Today", C.listToday() === d.today ? "" : "") + sec("tomorrow", "Tomorrow") + sec("week", "This week") +
+          sec("notUpdated", "Past calls not updated", "Mark them Completed or Cancelled") + '</div></div>' +
+          '<div class="note">Calls after midnight (before 6:00 AM) stay on the previous day\'s list, as in TTOP.</div>';
+      }
+      main().innerHTML = h;
+      document.getElementById("c_r").onclick = pCalls;
+      var cm = document.getElementById("c_m"); if (cm) cm.onchange = function () { STATE.member = cm.value; pCalls(); };
+      Array.prototype.forEach.call(main().querySelectorAll("[data-a]"), function (b) { b.onclick = function () { callAction(Number(b.dataset.id), b.dataset.a, d.calls.find(function (x) { return x.id === Number(b.dataset.id); })); }; });
+    })).catch(guard(fail));
+  }
+  function callCard(c) {
+    var mine = c.myPart === "Tool Drive" || ME.isAdmin, open = c.status === "Scheduled" || c.status === "Date Pending", past = c.date <= C.listToday();
+    return '<div class="call"><div class="top"><div><div class="t">' + C.time12(c.time) + ' <small class="muted" style="font-weight:500">' + esc(c.date) + ' · ' + nf(c.duration) + ' min</small></div>' +
+      '<div class="who">' + esc(c.candidate) + '</div><div class="meta">' + esc(c.client) + (c.role ? ' · ' + esc(c.role) : '') + ' · ' + esc(c.round) + ' · ' + esc(c.type) + '</div>' +
+      '<div class="meta">' + esc(c.myPart) + (c.myPart !== "Tool Drive" && c.toolDrive ? ' · Tool Drive: ' + esc(c.toolDrive) : '') + (c.support ? ' · Support: ' + esc(c.support) : '') + '</div></div>' +
+      '<div style="text-align:right"><span class="pill ' + esc(c.status.split(" ")[0]) + '">' + esc(c.status) + '</span>' + (c.rescheduleRequested ? '<div style="margin-top:4px"><span class="pill w">Reschedule requested</span></div>' : '') + '</div></div>' +
+      (c.notes ? '<div class="meta">' + esc(c.notes) + '</div>' : '') + (c.feedback ? '<div class="fb">' + esc(c.feedback) + '</div>' : '') +
+      '<div class="act">' +
+      (mine && open && past ? '<button class="sm p" data-a="complete" data-id="' + c.id + '">Completed</button>' : '') +
+      (mine && open ? '<button class="sm d" data-a="cancel" data-id="' + c.id + '">Cancelled</button>' : '') +
+      (mine && open && !c.rescheduleRequested ? '<button class="sm" data-a="request_reschedule" data-id="' + c.id + '">Request reschedule</button>' : '') +
+      (ME.isAdmin && c.rescheduleRequested ? '<button class="sm" data-a="clear_reschedule" data-id="' + c.id + '">Clear reschedule request</button>' : '') +
+      '<button class="sm" data-a="feedback" data-id="' + c.id + '">Add feedback</button></div></div>';
+  }
+  function callAction(id, action, c) {
+    var L = { complete: ["Mark as Completed", "Feedback (optional)", false], cancel: ["Mark as Cancelled", "Reason (optional)", false],
+      request_reschedule: ["Request a reschedule", "New date / time or reason", true], clear_reschedule: ["Clear the reschedule request", "", false],
+      feedback: ["Add feedback", "Feedback", true] }[action];
+    var d = document.createElement("dialog");
+    d.innerHTML = '<h3>' + L[0] + '</h3><p class="muted" style="margin:0">' + esc(c ? c.candidate + " · " + c.client + " · " + c.round + " · " + C.time12(c.time) : "") + '</p>' +
+      (L[1] ? '<label>' + L[1] + '</label><textarea id="d_n" rows="3" maxlength="1000"></textarea>' : '') + '<p class="err" id="d_e"></p>' +
+      '<div class="row"><button id="d_c">Cancel</button><button class="p" id="d_s">Save</button></div>';
+    document.body.appendChild(d); d.showModal();
+    var close = function () { d.close(); d.remove(); };
+    d.querySelector("#d_c").onclick = close;
+    d.querySelector("#d_s").onclick = function () {
+      var note = d.querySelector("#d_n") ? d.querySelector("#d_n").value.trim() : "";
+      if (L[2] && !note) { d.querySelector("#d_e").textContent = "Please write something first."; return; }
+      this.disabled = true;
+      rpc("cp_update_call", { p_id: id, p_action: action, p_note: note || null }).then(function () { close(); toast("Saved"); pCalls(); })
+        .catch(function (e) { d.querySelector("#d_s").disabled = false; d.querySelector("#d_e").textContent = e.message; });
+    };
+  }
+
+  /* ---------------- 4. Add Interviews (admin) ---------------- */
+  var ADD = { tab: "doc", text: "", date: "", rows: null, res: null };
+  function pAdd() {
+    members().then(guard(function (mem) {
+      ADD.date = ADD.date || C.listToday();
+      var h = head("Add Interviews", "Paste the day's list from the Google Doc or WhatsApp. Nothing is added until you press Import all.", "");
+      h += '<div class="card"><div class="cb"><div class="tabs" role="group" aria-label="Source">' +
+        [["doc", "Google Doc"], ["wa", "WhatsApp message"]].map(function (t) { return '<button data-t="' + t[0] + '" aria-pressed="' + (ADD.tab === t[0]) + '">' + t[1] + '</button>'; }).join("") + '</div>' +
+        '<p class="muted" style="margin-top:0">' + (ADD.tab === "doc"
+          ? '<b>Import from Google Doc.</b> Paste the daily list or upload it as a text file. Date headings set the day (lines before any heading use the date below). Times before 6:00 AM (like 1:30 AM) stay on that day\'s list as late-night calls.'
+          : '<b>Import from a WhatsApp message.</b> Copy the message (or several) from WhatsApp and paste it here. The “[time, date] Name:” prefix, *bold* / _italic_ marks and numbering are removed; each interview line is read like a Google Doc line, and lines such as “25 Nov 2026” or “25/11/2026” set the day.') + '</p>' +
+        '<textarea id="a_t" rows="9" placeholder="' + (ADD.tab === "doc" ? 'October 5, 2026 (Monday)&#10;Name (UK)(Role) – Interview – Client – 4:00 PM IST – Duration: 60 Mins (2nd Round)-gopi'
+          : '[10:42 am, 25/11/2026] Pradeep: *26 Nov 2026*&#10;1. Name (UK)(Role) - Interview - Client - 4:00 PM IST - Duration: 60 Mins (2nd Round)-gopi') + '">' + esc(ADD.text) + '</textarea>' +
+        '<div class="ctl" style="margin-top:10px"><label class="muted">Date for lines before any heading <input type="date" id="a_d" value="' + esc(ADD.date) + '"></label>' +
+        (ADD.tab === "doc" ? '<input type="file" id="a_f" accept=".txt,text/plain" multiple>' : '') + '<button class="p" id="a_p">Preview import</button></div></div></div><div id="a_r"></div>';
+      main().innerHTML = h;
+      Array.prototype.forEach.call(main().querySelectorAll("[data-t]"), function (b) { b.onclick = function () { ADD.text = document.getElementById("a_t").value; ADD.tab = b.dataset.t; ADD.rows = null; pAdd(); }; });
+      var f = document.getElementById("a_f");
+      if (f) f.onchange = function () { Promise.all(Array.prototype.map.call(f.files, function (x) { return x.text(); })).then(function (t) { document.getElementById("a_t").value = t.join("\n\n"); preview(mem); }); };
+      document.getElementById("a_p").onclick = function () { preview(mem); };
+      if (ADD.rows) drawAdd();
+    })).catch(guard(fail));
+  }
+  function preview(mem) {
+    ADD.text = document.getElementById("a_t").value; ADD.date = document.getElementById("a_d").value || C.listToday();
+    var src = ADD.tab === "wa" ? C.whatsappToDoc(ADD.text) : ADD.text;
+    var p = C.parseDocList(src, { today: C.listToday(), date: ADD.date, pocNames: mem.map(function (m) { return m.name; }) });
+    ADD.parsed = p; ADD.rows = p.rows; ADD.res = null;
+    if (!p.rows.length) { document.getElementById("a_r").innerHTML = '<div class="card"><div class="cb err">No interview lines found. Paste the list including the date headings.</div></div>'; return; }
+    document.getElementById("a_r").innerHTML = '<div class="card"><div class="empty">Checking ' + p.rows.length + ' lines…</div></div>';
+    rpc("cp_import_interviews", { p_rows: payload(), p_dry: true }).then(function (r) { ADD.res = r; drawAdd(); }).catch(function (e) { document.getElementById("a_r").innerHTML = '<div class="card"><div class="cb err">' + esc(e.message) + '</div></div>'; });
+  }
+  function payload() {
+    return ADD.rows.map(function (r) { return { cand: r.cand, client: r.client, role: r.role, date: r.date, time: r.time, dur: r.dur, round: r.round, type: r.type, poc: r.poc, notes: r.notes, tech: r.tech, mode: r.mode || "new" }; });
+  }
+  var RES = { added: ["Will be added", "added"], rescheduled: ["Reschedule of an existing interview", "rescheduled"], exists: ["Already in the portal", "mute"],
+    review_new_candidate: ["New candidate: goes to Import Review", "review"], review_new_client: ["New client: goes to Import Review", "review"],
+    review_new_role: ["New role: goes to Import Review", "review"], review_duplicate: ["Same round exists: goes to Import Review", "review"],
+    already_in_review: ["Already waiting in Import Review", "mute"], skipped: ["Skipped", "bad"], failed: ["Failed", "bad"] };
+  function drawAdd(done) {
+    var r = ADD.res, el = document.getElementById("a_r"); if (!r || !el) return;
+    var p = ADD.parsed || { skipped: [], merged: 0 };
+    var cnt = function (k) { return r.rows.filter(function (x) { return x.result === k; }).length; };
+    var h = '<div class="card"><div class="ch"><div><b>' + (done ? "Imported" : "Preview") + '</b><small>' + ADD.rows.length + ' interviews read' + (p.merged ? ' · ' + p.merged + ' repeated lines merged' : '') +
+      ' · ' + (r.added + r.rescheduled) + (done ? ' added' : ' will be added') + ' · ' + r.review + (done ? ' sent' : ' go') + ' to Import Review · ' + r.skipped + ' skipped' + (r.failed ? ' · ' + r.failed + ' failed' : '') + '</small></div>' +
+      (done ? '<button id="a_n">New import</button>' : '<button class="p" id="a_go"' + ((r.added + r.rescheduled + r.review) ? '' : ' disabled') + '>Import all</button>') + '</div>' +
+      (p.skipped.length ? '<div class="cb err" style="font-size:12px">' + p.skipped.length + ' numbered line' + (p.skipped.length === 1 ? " was" : "s were") + ' not recognised: ' + p.skipped.slice(0, 5).map(esc).join(" · ") + '</div>' : '') +
+      '<div class="cb scroll"><table class="resp"><thead><tr><th>Date</th><th>Time</th><th>Candidate</th><th>Role</th><th>Client</th><th>Round</th><th>POC</th><th>Result</th><th></th></tr></thead><tbody>' +
+      ADD.rows.map(function (x, i) {
+        var s = r.rows[i] || {}, R = RES[s.result] || [s.result, "mute"];
+        var canRs = !done && s.result === "review_duplicate";
+        return '<tr><td data-l="Date">' + esc(x.date) + '</td><td data-l="Time">' + C.time12(x.time) + '</td><td data-l="Candidate"><b>' + esc(x.cand) + '</b>' + (x.loc ? ' <small class="muted">(' + esc(x.loc) + ')</small>' : '') + '</td>' +
+          '<td data-l="Role">' + esc(x.role || "—") + '</td><td data-l="Client">' + esc(x.client) + '</td><td data-l="Round">' + esc(x.round) + (x.roundGiven ? '' : ' <small class="muted">(not in line)</small>') + (x.tech ? ' <span class="pill">Technical</span>' : '') + '</td>' +
+          '<td data-l="POC">' + esc(x.poc || "—") + '</td><td data-l="Result"><span class="pill ' + R[1] + '">' + esc(R[0]) + '</span>' + (s.message ? '<div class="muted" style="font-size:12px">' + esc(s.message) + '</div>' : '') + (x.notes ? '<div class="muted" style="font-size:12px">' + esc(x.notes) + '</div>' : '') + '</td>' +
+          '<td>' + (canRs ? '<button class="sm" data-rs="' + i + '">It is a reschedule</button>' : x.mode === "reschedule" && !done ? '<button class="sm" data-un="' + i + '">Not a reschedule</button>' : '') + '</td></tr>';
+      }).join("") + '</tbody></table></div><div class="cb muted" style="font-size:12px">Same rules as TTOP: a new candidate, client or role, and a second line for a round that already exists, wait on TTOP\'s Import Review until someone checks them. An identical interview is never added twice, so importing the same list again adds nothing. Lines with no time are saved as Date Pending.</div></div>';
+    el.innerHTML = h;
+    var go = document.getElementById("a_go");
+    if (go) go.onclick = function () {
+      if (!confirm("Import " + (r.added + r.rescheduled) + " interview(s) and send " + r.review + " line(s) to Import Review?")) return;
+      go.disabled = true; go.textContent = "Importing…";
+      rpc("cp_import_interviews", { p_rows: payload(), p_dry: false }).then(function (x) { ADD.res = x; drawAdd(true); toast(x.added + x.rescheduled + " added, " + x.review + " to Import Review"); })
+        .catch(function (e) { go.disabled = false; go.textContent = "Import all"; toast(e.message); });
+    };
+    var nw = document.getElementById("a_n"); if (nw) nw.onclick = function () { ADD = { tab: ADD.tab, text: "", date: ADD.date, rows: null, res: null }; pAdd(); };
+    var re = function () { rpc("cp_import_interviews", { p_rows: payload(), p_dry: true }).then(function (x) { ADD.res = x; drawAdd(); }).catch(function (e) { toast(e.message); }); };
+    Array.prototype.forEach.call(el.querySelectorAll("[data-rs]"), function (b) { b.onclick = function () { ADD.rows[+b.dataset.rs].mode = "reschedule"; re(); }; });
+    Array.prototype.forEach.call(el.querySelectorAll("[data-un]"), function (b) { b.onclick = function () { ADD.rows[+b.dataset.un].mode = "new"; re(); }; });
+  }
+
+  /* ---------------- 5. Assign Interviews (admin) ---------------- */
+  var ASG = { date: "", text: "", leads: {}, rows: null };
+  function pAssign() {
+    members().then(guard(function (mem) {
+      ASG.date = ASG.date || C.listToday();
+      try { ASG.leads = JSON.parse(localStorage.getItem("cp_team_leads") || "{}") || {}; } catch (e) { ASG.leads = {}; }
+      var cp = mem.filter(function (m) { return m.isCallPilot; });
+      var h = head("Assign Interviews", "Paste the day's Tool Drive list. Interviews are matched by candidate and time; only the Tool Drive changes.", "");
+      h += '<div class="card"><div class="cb"><p class="muted" style="margin-top:0">Each line: <b>Candidate (UK) - 1:30 (*Tool Drive name*)</b>. Times have no AM/PM: the list is read in order, so 12:30 after 11:30 is after midnight. ' +
+        'A line without a name uses its <b>team heading</b> (like <b>*HYD Team*</b>) and the team lead chosen below, and never replaces a Tool Drive that is already set.</p>' +
+        '<div class="ctl"><label class="muted">Date of the list <input type="date" id="s_d" value="' + esc(ASG.date) + '"></label>' +
+        (ME.teams || []).map(function (t) {
+          return '<label class="muted">Lead for “' + esc(t) + '” <select data-lead="' + esc(t) + '"><option value="">none</option>' + cp.filter(function (m) { return m.team === t; }).map(function (m) { return '<option value="' + m.id + '"' + (String((ASG.leads[t] || {}).id) === String(m.id) ? " selected" : "") + '>' + esc(m.name) + '</option>'; }).join("") + '</select></label>';
+        }).join("") + '</div>' +
+        '<textarea id="s_t" rows="9" style="margin-top:10px" placeholder="*HYD Team*&#10;Sri Charan S (Ireland) - 1:30&#10;Sakshi Goud (UK) - 6:00 (*Karthikeya*)">' + esc(ASG.text) + '</textarea>' +
+        '<div class="ctl" style="margin-top:10px"><button class="p" id="s_m">Match interviews</button></div></div></div><div id="s_r"></div>' +
+        '<div class="card"><div class="ch"><div><b>Call Pilots handlers</b><small>Who appears on the dashboards and as a team lead. Team members come from TTOP\'s Team page (same login email).</small></div><button id="s_h">Show</button></div><div id="s_hl" class="cb scroll" hidden></div></div>';
+      main().innerHTML = h;
+      document.getElementById("s_h").onclick = function () {
+        var box = document.getElementById("s_hl"); box.hidden = !box.hidden; this.textContent = box.hidden ? "Show" : "Hide";
+        if (box.hidden) return;
+        var teams = (ME.teams || []).concat(["Pradeep Anna", "HYD"]).filter(function (v, i, a) { return a.indexOf(v) === i; });
+        box.innerHTML = '<datalist id="s_teams">' + teams.map(function (t) { return '<option value="' + esc(t) + '">'; }).join("") + '</datalist>' +
+          '<table class="resp"><thead><tr><th>Team member</th><th>Call Pilots handler</th><th>Team</th><th></th></tr></thead><tbody>' + mem.map(function (m) {
+            return '<tr><td data-l="Member"><b>' + esc(m.name) + '</b><div class="muted">' + esc(m.email) + '</div></td><td data-l="Handler"><input type="checkbox" data-hc="' + m.id + '"' + (m.isCallPilot ? " checked" : "") + '></td>' +
+              '<td data-l="Team"><input list="s_teams" data-ht="' + m.id + '" value="' + esc(m.team || "") + '" placeholder="e.g. HYD" style="width:150px"></td><td><button class="sm" data-hs="' + m.id + '">Save</button></td></tr>';
+          }).join("") + '</tbody></table>';
+        Array.prototype.forEach.call(box.querySelectorAll("[data-hs]"), function (b) {
+          b.onclick = function () {
+            var id = b.dataset.hs, on = box.querySelector('[data-hc="' + id + '"]').checked, team = box.querySelector('[data-ht="' + id + '"]').value.trim();
+            b.disabled = true;
+            rpc("cp_set_member", { p_member: Number(id), p_is_call_pilot: on, p_team: team || null }).then(function () {
+              var m = mem.find(function (x) { return String(x.id) === id; }); m.isCallPilot = on; m.team = team || null;
+              if (on && team && (ME.teams || []).indexOf(team) < 0) (ME.teams = ME.teams || []).push(team);
+              b.disabled = false; toast("Saved " + m.name);
+            }).catch(function (e) { b.disabled = false; toast(e.message); });
+          };
+        });
+      };
+      Array.prototype.forEach.call(main().querySelectorAll("[data-lead]"), function (s) {
+        s.onchange = function () { var m = mem.find(function (x) { return String(x.id) === s.value; }); if (m) ASG.leads[s.dataset.lead] = m; else delete ASG.leads[s.dataset.lead]; try { localStorage.setItem("cp_team_leads", JSON.stringify(ASG.leads)); } catch (e) {} };
+      });
+      document.getElementById("s_m").onclick = function () { matchAssign(mem); };
+      if (ASG.rows) drawAssign();
+    })).catch(guard(fail));
+  }
+  function matchAssign(mem) {
+    ASG.text = document.getElementById("s_t").value; ASG.date = document.getElementById("s_d").value || C.listToday();
+    var ent = C.parseToolDriveList(ASG.text), el = document.getElementById("s_r");
+    if (!ent.length) { el.innerHTML = '<div class="card"><div class="cb err">No lines found. Each line should look like: Name (UK) - 1:30 (*Tool Drive name*)</div></div>'; return; }
+    el.innerHTML = '<div class="card"><div class="empty">Matching…</div></div>';
+    rpc("cp_day_calls", { p_date: ASG.date }).then(function (calls) {
+      ASG.rows = C.matchToolDrive(ent, calls, mem, ASG.leads).map(function (r) { r.sel = r.ok && !/^Time differs/.test(r.msg); return r; });
+      ASG.done = null; drawAssign();
+    }).catch(function (e) { el.innerHTML = '<div class="card"><div class="cb err">' + esc(e.message) + '</div></div>'; });
+  }
+  function drawAssign() {
+    var el = document.getElementById("s_r"); if (!el || !ASG.rows) return;
+    var R = ASG.rows, n = R.filter(function (r) { return r.sel; }).length, done = ASG.done;
+    var h = '<div class="card"><div class="ch"><div><b>' + (done ? "Applied" : "Preview") + '</b><small>' + R.length + ' lines · ' + R.filter(function (r) { return r.ok; }).length + ' can be set · ' + R.filter(function (r) { return r.same; }).length + ' already set · ' +
+      R.filter(function (r) { return !r.ok && !r.same; }).length + ' not matched</small></div>' + (done ? '' : '<button class="p" id="s_go"' + (n ? '' : ' disabled') + '>Set Tool Drive on ' + n + ' interview' + (n === 1 ? '' : 's') + '</button>') + '</div>' +
+      '<div class="cb scroll"><table class="resp"><thead><tr><th></th><th>Team</th><th>Candidate</th><th>Time</th><th>Interview</th><th>Now</th><th>New Tool Drive</th><th>Result</th></tr></thead><tbody>' +
+      R.map(function (r) {
+        var res = done ? (done[r.k] || {}) : null;
+        return '<tr><td>' + (done ? '' : '<input type="checkbox" data-k="' + r.k + '"' + (r.sel ? " checked" : "") + (r.ok ? "" : " disabled") + '>') + '</td><td data-l="Team">' + esc(r.e.grp || "—") + '</td>' +
+          '<td data-l="Candidate"><b>' + esc(r.call ? r.call.candidate : r.e.name) + '</b>' + (r.e.first ? ' <small class="muted">(1st interview)</small>' : '') + '</td><td data-l="Time">' + C.time12(r.e.time) + '</td>' +
+          '<td data-l="Interview">' + (r.call ? esc(r.call.client) + ' · ' + esc(r.call.round) + ' · ' + C.time12(r.call.time) : '—') + '</td><td data-l="Now">' + esc((r.call && r.call.toolDrive) || "—") + '</td>' +
+          '<td data-l="New">' + esc(r.member ? r.member.name : r.e.tool || "—") + (r.fromTeam ? ' <small class="muted">(team)</small>' : '') + '</td>' +
+          '<td data-l="Result">' + (res ? '<span class="pill ' + (res.result === "assigned" || res.result === "changed" ? "assigned" : res.result === "unchanged" || res.result === "kept_existing" ? "mute" : "bad") + '">' + esc(String(res.result || "not applied").replace(/_/g, " ")) + '</span>' + (res.clashWith ? '<div class="muted" style="font-size:12px">Also has another call at this time</div>' : '')
+            : '<small class="' + (r.ok ? "ok" : "muted") + '">' + (r.ok ? "Can be set" : r.same ? "" : "Skipped") + (r.msg ? (r.ok ? ". " : ": ") + esc(r.msg) : '') + '</small>') + '</td></tr>';
+      }).join("") + '</tbody></table></div></div>';
+    el.innerHTML = h;
+    Array.prototype.forEach.call(el.querySelectorAll("[data-k]"), function (c) { c.onchange = function () { ASG.rows[+c.dataset.k].sel = c.checked; drawAssign(); }; });
+    var go = document.getElementById("s_go");
+    if (go) go.onclick = function () {
+      var sl = ASG.rows.filter(function (r) { return r.sel && r.ok; });
+      go.disabled = true; go.textContent = "Saving…";
+      rpc("cp_assign_tool_drive", { p_date: ASG.date, p_rows: sl.map(function (r) { return { interviewId: r.call.id, memberId: r.member.id, fromTeam: r.fromTeam }; }), p_dry: false }).then(function (x) {
+        ASG.done = {}; sl.forEach(function (r, i) { ASG.done[r.k] = x.rows[i]; });
+        drawAssign(); toast("Tool Drive set on " + x.set + " interview" + (x.set === 1 ? "" : "s"));
+      }).catch(function (e) { go.disabled = false; toast(e.message); drawAssign(); });
+    };
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>

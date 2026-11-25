@@ -210,6 +210,9 @@ app_import_chunks, app_state`.
 
 ## 9. Phases (one commit each, stop for review)
 
+Status 2026-11-25: all phases done and live. Not done: real-SQL tests on PGlite (package not approved), phone alerts for Call-Pilots-only handlers (TTOP push subscriptions need TTOP access).
+
+
 1. **This plan** (done).
 2. Step A migration + RPCs + PGlite DB tests.
 3. Portal pages 1–3 (Dashboard, Incentives, My calls).

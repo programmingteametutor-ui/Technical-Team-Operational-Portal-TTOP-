@@ -10,8 +10,9 @@
   "scripts": {
     "start": "TZ=Asia/Kolkata node server/index.js",
     "check": "node scripts/check.js",
-    "test": "node --test portals/ttop/test/*.test.js",
-    "test:ttop": "node --test portals/ttop/test/*.test.js"
+    "test": "node --test portals/ttop/test/*.test.js portals/callpilots/test/*.test.js",
+    "test:ttop": "node --test portals/ttop/test/*.test.js",
+    "test:callpilots": "node --test portals/callpilots/test/*.test.js"
   },
   "dependencies": {
     "mysql2": "3.11.3",

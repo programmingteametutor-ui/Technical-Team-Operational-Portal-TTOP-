@@ -6,7 +6,7 @@ One app that hosts two portals with one Google sign-in, one Supabase database
 - **TTOP Portal** (`portals/ttop/`): the technical team's portal, unchanged.
   Its page is served byte-for-byte and its API functions run as they did on
   Vercel. Its data is protected by TTOP's own row-level security.
-- **Call Pilots Operations Portal** (`portals/callpilots/`, being rebuilt): the
+- **Call Pilots Operations Portal** (`portals/callpilots/`): the
   portal where the Pradeep Anna Team and the HYD team drive interview calls.
   It works on TTOP's interviews and incentives: a Call Pilots handler is the
   interview's **Tool Drive**. Every read and write goes through the `cp_*` SQL
