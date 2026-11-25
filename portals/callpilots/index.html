@@ -237,12 +237,16 @@ var CORE = (function () {
        [10:42 am, 25/11/2026] Name: line          25/11/2026, 10:42 - Name: line
      *bold* _italic_ ~strike~ markers are removed; numbered lines are fine;
      date lines like "25 Nov 2026", "*25/11/2026*" or "Nov 25" become date headings. */
+  /* "[10:42 am, 25/11/2026] Name: " or "25/11/2026, 10:42 - Name: " (copying several WhatsApp messages) */
+  function stripChatPrefix(ln) {
+    return String(ln || "").replace(/[‎‏‪‬]/g, "")
+      .replace(/^\s*\[\d{1,2}[:.]\d{2}(?:[:.]\d{2})?\s*(?:[ap]\.?\s?m\.?)?,\s*\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}\]\s*[^:]{1,60}:\s*/i, "")
+      .replace(/^\s*\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4},?\s+\d{1,2}[:.]\d{2}(?:\s*[ap]\.?\s?m\.?)?\s+-\s+[^:]{1,60}:\s*/i, "");
+  }
   function whatsappToDoc(text) {
     var out = [];
     String(text || "").replace(/\r/g, "").split("\n").forEach(function (ln) {
-      var s = ln.replace(/‎|‏|‪|‬/g, "");
-      s = s.replace(/^\s*\[\d{1,2}[:.]\d{2}(?:[:.]\d{2})?\s*(?:[ap]\.?\s?m\.?)?,\s*\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}\]\s*[^:]{1,60}:\s*/i, "");
-      s = s.replace(/^\s*\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4},?\s+\d{1,2}[:.]\d{2}(?:\s*[ap]\.?\s?m\.?)?\s+-\s+[^:]{1,60}:\s*/i, "");
+      var s = stripChatPrefix(ln);
       s = s.replace(/(^|[\s(])[*_~]+(?=\S)/g, "$1").replace(/(\S)[*_~]+(?=[\s),.:;!?]|$)/g, "$1").trim();
       if (!s || /^<media omitted>$|^this message was deleted$|^you deleted this message$/i.test(s)) return;
       if (!/interview|\bcall\b|round/i.test(s)) {
@@ -271,8 +275,9 @@ var CORE = (function () {
   function parseToolDriveList(txt) {
     var out = [], grp = "", prev = null;
     String(txt || "").split(/\r?\n/).forEach(function (raw) {
-      var s = raw.replace(/\t/g, " ").replace(/^\s*(?:\d+[.)]\s+|[-•]\s+)/, "").trim();
-      if (!s) return;
+      // WhatsApp prefix only: the *bold* (*Name*) tags carry the Tool Drive names, so they stay
+      var s = stripChatPrefix(raw).replace(/\t/g, " ").replace(/^\s*(?:\d+[.)]\s+|[-•]\s+)/, "").trim();
+      if (!s || /^<media omitted>$|^this message was deleted$/i.test(s)) return;
       var t = /\s*[-–—]\s*(\d{1,2}):(\d{2})\s*(am|pm)?/i.exec(s);
       if (!t) { var h = s.replace(/[*_]/g, "").trim(); if (h && !/\d/.test(h)) { grp = h; prev = null; } return; }
       var tags = Array.from(s.matchAll(/\(\*([^)]*?)\*\)/g)).map(function (x) { return x[1].trim(); }).filter(Boolean);

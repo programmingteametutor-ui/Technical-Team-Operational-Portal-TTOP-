@@ -255,3 +255,13 @@ test('a new role is only flagged, never held (decision 25 Nov 2026)', () => {
   const sync = fs.readFileSync(path.join(__dirname, '..', '..', 'ttop', 'api', 'sync-doc.js'), 'utf8');
   assert.doesNotMatch(sync, /'newrole'/);
 });
+test('Tool Drive list copied with WhatsApp prefixes keeps headings and (*Name*) tags', () => {
+  const plain = ['*HYD Team*', 'Asha Kiran Rao (UK) - 2:30', 'Meera Bhaskaran (UK) - 7:00 (*Karthik D*)', '', '*Pradeep Anna Team*', 'Tara Menon - 12:00'].join('\n');
+  const wa = ['[9:15 pm, 24/11/2026] Pradeep: *HYD Team*', '[9:15 pm, 24/11/2026] Pradeep: Asha Kiran Rao (UK) - 2:30',
+    '[9:15 pm, 24/11/2026] Pradeep: Meera Bhaskaran (UK) - 7:00 (*Karthik D*)', '24/11/2026, 21:16 - Pradeep: *Pradeep Anna Team*',
+    '24/11/2026, 21:16 - Pradeep: Tara Menon - 12:00', '<Media omitted>'].join('\n');
+  const a = CORE.parseToolDriveList(plain), b = CORE.parseToolDriveList(wa);
+  assert.deepEqual(b, a);
+  assert.deepEqual(b.map(x => [x.name, x.time, x.tool, x.grp]), [
+    ['Asha Kiran Rao', '14:30', '', 'HYD Team'], ['Meera Bhaskaran', '19:00', 'Karthik D', 'HYD Team'], ['Tara Menon', '12:00', '', 'Pradeep Anna Team']]);   // first line after a heading: noon (TTOP rule)
+});
