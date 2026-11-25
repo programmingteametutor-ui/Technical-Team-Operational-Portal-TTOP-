@@ -4,7 +4,9 @@
 const test = require('node:test'), assert = require('node:assert'), fs = require('fs'), path = require('path');
 const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 const CORE = new Function(html.slice(html.indexOf('/* core:start */'), html.indexOf('/* core:end */')) + '\nreturn CORE;')();
-const SQL = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'supabase', 'migrations', '20261125000001_callpilots.sql'), 'utf8');
+const MIG = path.join(__dirname, '..', '..', '..', 'supabase', 'migrations');
+// every Call Pilots migration, in order (later files replace functions of earlier ones)
+const SQL = fs.readdirSync(MIG).filter(f => /^2026112500000\d_/.test(f)).sort().map(f => fs.readFileSync(path.join(MIG, f), 'utf8')).join('\n');
 
 /* ---------- money, months, IST list day ---------- */
 test('Indian Rupee format uses lakh grouping', () => {

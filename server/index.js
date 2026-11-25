@@ -138,9 +138,16 @@ async function appApi(req, res, sub) {
     try {
       if (req.method === "GET") {
         const all = await auth.loadUsers(true);
+        // link to the Tool Drive list (team_members) by login email
+        const tm = new Map((await rest("GET", "team_members?select=email,name,call_pilot_team,is_call_pilot").catch(() => []))
+          .map(m => [String(m.email || "").trim().toLowerCase(), m]));
         const list = [...all.values()]
           .filter(u => { const mine = auth.access(me); return me.role === "super_admin" || auth.access(u).some(k => mine.includes(k)); })
-          .map(u => Object.assign(publicUser(u), { active: u.active, lastLogin: u.last_login_at || null, canEdit: auth.mayManage(me, u, u) }));
+          .map(u => {
+            const m = tm.get(u.email);
+            return Object.assign(publicUser(u), { active: u.active, lastLogin: u.last_login_at || null, canEdit: auth.mayManage(me, u, u),
+              toolDrive: m ? { name: m.name, team: m.call_pilot_team, handler: !!m.is_call_pilot } : null });
+          });
         return sendJson(res, 200, { ok: true, users: list });
       }
       if (req.method === "POST") { const u = await auth.saveUser(me, await readJson(req)); return sendJson(res, 200, { ok: true, user: publicUser(u) }); }

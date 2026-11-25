@@ -694,35 +694,52 @@ var CORE = (function () {
         }).join("") + '</div>' +
         '<textarea id="s_t" rows="9" style="margin-top:10px" placeholder="*HYD Team*&#10;Sri Charan S (Ireland) - 1:30&#10;Sakshi Goud (UK) - 6:00 (*Karthikeya*)">' + esc(ASG.text) + '</textarea>' +
         '<div class="ctl" style="margin-top:10px"><button class="p" id="s_m">Match interviews</button></div></div></div><div id="s_r"></div>' +
-        '<div class="card"><div class="ch"><div><b>Call Pilots handlers</b><small>Who appears on the dashboards and as a team lead. People given a Call Pilots team on the home page (People) are added here automatically.</small></div><button id="s_h">Show</button></div><div id="s_hl" class="cb scroll" hidden></div></div>';
+        '<div class="card"><div class="ch"><div><b>Tool Drive list</b><small>Everyone who can be the Tool Drive of a call, by team. ' +
+        'Pradeep Anna and HYD handlers come from People on the home page (they use this app). People of other teams (Development, Marketing, …) only need to be listed here: no app access.</small></div></div>' +
+        '<div class="cb" id="s_tdl"></div></div>';
       main().innerHTML = h;
-      document.getElementById("s_h").onclick = function () {
-        var box = document.getElementById("s_hl"); box.hidden = !box.hidden; this.textContent = box.hidden ? "Show" : "Hide";
-        if (box.hidden) return;
-        var teams = ME.isSuper ? (ME.teams || []).concat(["Pradeep Anna", "HYD"]).filter(function (v, i, a) { return a.indexOf(v) === i; }) : (ME.teams || []);
-        box.innerHTML = '<datalist id="s_teams">' + teams.map(function (t) { return '<option value="' + esc(t) + '">'; }).join("") + '</datalist>' +
-          '<table class="resp"><thead><tr><th>Team member</th><th>Call Pilots handler</th><th>Team</th><th></th></tr></thead><tbody>' + mem.map(function (m) {
-            return '<tr><td data-l="Member"><b>' + esc(m.name) + '</b><div class="muted">' + esc(m.email) + '</div></td><td data-l="Handler"><input type="checkbox" data-hc="' + m.id + '"' + (m.isCallPilot ? " checked" : "") + '></td>' +
-              '<td data-l="Team"><input list="s_teams" data-ht="' + m.id + '" value="' + esc(m.team || "") + '" placeholder="e.g. HYD" style="width:150px"></td><td><button class="sm" data-hs="' + m.id + '">Save</button></td></tr>';
-          }).join("") + '</tbody></table>';
-        Array.prototype.forEach.call(box.querySelectorAll("[data-hs]"), function (b) {
-          b.onclick = function () {
-            var id = b.dataset.hs, on = box.querySelector('[data-hc="' + id + '"]').checked, team = box.querySelector('[data-ht="' + id + '"]').value.trim();
-            b.disabled = true;
-            rpc("cp_set_member", { p_member: Number(id), p_is_call_pilot: on, p_team: team || null }).then(function () {
-              var m = mem.find(function (x) { return String(x.id) === id; }); m.isCallPilot = on; m.team = team || null;
-              if (on && team && (ME.teams || []).indexOf(team) < 0) (ME.teams = ME.teams || []).push(team);
-              b.disabled = false; toast("Saved " + m.name);
-            }).catch(function (e) { b.disabled = false; toast(e.message); });
-          };
-        });
-      };
+      drawToolDriveList(mem);
       Array.prototype.forEach.call(main().querySelectorAll("[data-lead]"), function (s) {
         s.onchange = function () { var m = mem.find(function (x) { return String(x.id) === s.value; }); if (m) ASG.leads[s.dataset.lead] = m; else delete ASG.leads[s.dataset.lead]; try { localStorage.setItem("cp_team_leads", JSON.stringify(ASG.leads)); } catch (e) {} };
       });
       document.getElementById("s_m").onclick = function () { matchAssign(mem); };
       if (ASG.rows) drawAssign();
     })).catch(guard(fail));
+  }
+  /* Tool Drive list: chips per team (like the scheduler's team board), add / remove */
+  function drawToolDriveList(mem) {
+    var box = document.getElementById("s_tdl"); if (!box) return;
+    var listed = mem.filter(function (m) { return m.team; });
+    var cpTeams = ME.isSuper ? ["Pradeep Anna", "HYD"] : (ME.teams || []);
+    var order = cpTeams.concat(listed.map(function (m) { return m.team; })).filter(function (v, i, a) { return a.indexOf(v) === i; });
+    var known = order.concat(["Development", "Marketing", "Sai", "Sandeep Anna"]).filter(function (v, i, a) { return a.indexOf(v) === i; });
+    box.innerHTML = order.map(function (t) {
+      var L = listed.filter(function (m) { return m.team === t; });
+      var isCp = t === "Pradeep Anna" || t === "HYD";
+      return '<div class="grp" style="margin:6px 0 8px;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--mute)">' + esc(t) + (isCp ? ' team <span class="pill" style="text-transform:none">uses the app</span>' : ' team') + '</div>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:8px">' + (L.length ? L.map(function (m) {
+          return '<span class="pill' + (isCp && !m.isCallPilot ? ' mute' : '') + '" style="font-size:13px;padding:6px 10px;display:inline-flex;gap:8px;align-items:center" title="' + esc(m.email || "No app login") + '">' + esc(m.name) +
+            ' <button class="sm" data-rm="' + m.id + '" aria-label="Remove ' + esc(m.name) + '" style="padding:0 6px;border:0;background:transparent">✕</button></span>';
+        }).join("") : '<span class="muted" style="font-size:12px">Nobody yet' + (isCp ? ' (give people this team on People)' : '') + '</span>') + '</div>';
+    }).join("") +
+      '<datalist id="s_tl">' + known.map(function (t) { return '<option value="' + esc(t) + '">'; }).join("") + '</datalist>' +
+      '<div class="ctl" style="margin-top:14px"><input id="s_an" placeholder="Name, as written in the Tool Drive list (e.g. Ravi K)" style="flex:2 1 220px"><input id="s_at" list="s_tl" placeholder="Team (e.g. Development)" style="flex:1 1 160px"><button class="p" id="s_ab">Add</button></div>';
+    document.getElementById("s_ab").onclick = function () {
+      var n = document.getElementById("s_an").value.trim(), t = document.getElementById("s_at").value.trim(), b = this;
+      if (!n || !t) return toast("Enter a name and a team");
+      b.disabled = true;
+      rpc("cp_add_tool_drive_person", { p_name: n, p_team: t }).then(function () { MEMBERS = null; return members(); })
+        .then(function (m2) { toast(n + " added to " + t); drawToolDriveList(m2); })
+        .catch(function (e) { b.disabled = false; toast(e.message); });
+    };
+    Array.prototype.forEach.call(box.querySelectorAll("[data-rm]"), function (b) {
+      b.onclick = function () {
+        var m = mem.find(function (x) { return String(x.id) === b.dataset.rm; });
+        if (!m || !confirm("Take " + m.name + " off the Tool Drive list? Their past calls and incentives stay.")) return;
+        rpc("cp_remove_tool_drive_person", { p_member: m.id }).then(function () { MEMBERS = null; return members(); })
+          .then(function (m2) { toast(m.name + " removed"); drawToolDriveList(m2); }).catch(function (e) { toast(e.message); });
+      };
+    });
   }
   function matchAssign(mem) {
     ASG.text = document.getElementById("s_t").value; ASG.date = document.getElementById("s_d").value || C.listToday();

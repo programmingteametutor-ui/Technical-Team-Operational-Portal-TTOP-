@@ -122,10 +122,10 @@ function createAuth({ supabaseUrl, serviceKey, anonKey, secret, rest, log }) {
     if (existing && existing.role === "super_admin" && role !== "super_admin" && countSuper(all) <= 1) throw httpError(400, "Keep at least one super admin");
     const row = { email, name: String(input.name || (existing && existing.name) || "").trim() || null, role, portals, cp_teams, active: next.active, updated_by: actor.email };
     await rest("POST", "app_users?on_conflict=email", [row], { Prefer: "resolution=merge-duplicates,return=minimal" })
-      .catch(async (e) => {   // database without cp_teams yet (migration 20261125000003 not run)
-        if (!/cp_teams/.test(e.message)) throw e;
-        delete row.cp_teams;
-        await rest("POST", "app_users?on_conflict=email", [row], { Prefer: "resolution=merge-duplicates,return=minimal" });
+      .catch((e) => {
+        // never drop the team silently: the database needs migration 20261125000003 first
+        if (/cp_teams/.test(e.message)) throw httpError(400, "Call Pilots teams cannot be saved yet: run supabase/migrations/20261125000003_callpilots_teams.sql (then 20261125000004) in the Supabase SQL Editor.");
+        throw httpError(400, "Could not save: " + e.message);
       });
     await loadUsers(true);
     return (await loadUsers()).get(email);

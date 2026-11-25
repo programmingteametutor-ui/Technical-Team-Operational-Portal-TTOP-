@@ -81,3 +81,15 @@ test('TTOP no longer manages users itself (People on the home page does)', () =>
   assert.doesNotMatch(html, /onchange="ur\(/);
   assert.match(html, /managed on the home page under <b>People<\/b>/);
 });
+
+test('Tool Drive teams: other teams can be Tool Drive without app access; People saves never fail', () => {
+  const sql = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '20261125000004_tooldrive_teams.sql'), 'utf8');
+  const body = (f) => { const i = sql.indexOf('function public.' + f + '('); assert.ok(i >= 0, f); return sql.slice(i, sql.indexOf('end $$', i)); };
+  assert.match(sql, /drop index if exists public\.team_first_name_uniq/);                  // Karthik / Karthik D can both exist
+  assert.match(body('trg_app_users_callpilots'), /exception when others then\s+raise warning/);  // linking never blocks a save
+  assert.match(body('cp_member_assignable'), /not public\.cp_is_cp_team\(tm\.call_pilot_team\)/);
+  assert.match(body('cp_assign_tool_drive'), /cp_member_assignable\(mid\)/);
+  assert.match(body('cp_add_tool_drive_person'), /@tooldrive\.invalid/);                   // no login for Tool Drive teams
+  assert.match(body('cp_add_tool_drive_person'), /You can only add people to your own Call Pilots team/);
+  assert.match(body('cp_members'), /not public\.cp_is_cp_team\(tm\.call_pilot_team\)/);
+});

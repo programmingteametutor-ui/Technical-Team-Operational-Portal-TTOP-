@@ -339,7 +339,8 @@
           return '<tr><td><b>' + esc(u.name || "") + '</b><div class="muted">' + esc(u.email) + '</div></td>' +
             '<td><span class="pill ' + u.role + '">' + ROLE_LABEL[u.role] + '</span>' + (u.active ? "" : ' <span class="pill warn">blocked</span>') + '</td>' +
             '<td>' + (accessOf(u).length ? accessOf(u).map(function (k) { return '<span class="pill">' + esc(accessLabel(k)) + '</span>'; }).join(" ") : '<span class="muted">none</span>') +
-              (u.role !== "super_admin" && (u.portals || []).indexOf("callpilots") >= 0 && !(u.cpTeams || []).length ? ' <span class="pill warn" title="Edit and tick a Call Pilots team">Call Pilots: no team</span>' : '') + '</td>' +
+              (u.role !== "super_admin" && (u.portals || []).indexOf("callpilots") >= 0 && !(u.cpTeams || []).length ? ' <span class="pill warn" title="Edit and tick a Call Pilots team">Call Pilots: no team</span>' : '') +
+              (u.role !== "super_admin" && (u.cpTeams || []).length ? (u.toolDrive && u.toolDrive.handler ? '<div class="muted" style="font-size:12px">Tool Drive list: ' + esc(u.toolDrive.name) + ' · ' + esc(u.toolDrive.team || "") + '</div>' : ' <span class="pill warn" title="Save again; if it stays, tell the developer">Not in the Tool Drive list yet</span>') : '') + '</td>' +
             '<td class="muted nowrap">' + when(u.lastLogin) + '</td>' +
             '<td>' + (u.canEdit ? '<button data-e="' + esc(u.email) + '">Edit</button>' : '') + '</td></tr>';
         }).join("") || '<tr><td colspan="5" class="muted">No match.</td></tr>';
