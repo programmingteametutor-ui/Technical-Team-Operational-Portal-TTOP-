@@ -183,3 +183,73 @@ test('handler functions are limited to the caller (cp_scope / cp_member_id), nev
 test('no secrets in the page', () => {
   assert.doesNotMatch(html, /service_role|SUPABASE_SERVICE|eyJhbGciOi/);
 });
+
+
+/* ---------- patterns from the team's real daily lists (made-up names) ---------- */
+const dayList = [
+  "Call's for tomorrow (25th Nov)",
+  '1.\tAsha Kiran Rao (UK) – Interview – Optimizely - Associate Business Systems Analyst – 2:30 PM IST – Duration: 30 Mins (1st Round)',
+  '2.\tMeera B (UK) – Interview – Lumai - AI Modelling and Simulation Engineer – 2:30 PM IST – Duration: 30 Mins (1st Round)',
+  '3.\tRohan Varma Kota (UK) – Call – Phn call - IVC Evidensia - Resource Planner - Data Analyst – 2:30 PM IST – Duration: 30 Mins (1st Round) ',
+  '4.\tNisha Reddy (Ireland) – Interview – Regeneron - (IT Applications Analyst Quality Systems) – 3:00 PM IST – Duration: 30 Mins (1st Round)',
+  '5.\tKiran Kumar M (IR) – Interview – Optum - senior data engineer – 3:30 PM IST – Duration: 20 Mins (1st Round) (Candidate Own Side)',
+  '6.\tAsha Kiran Rao (UK) – Interview – Technical Interview - Revolution Beauty - Demand Planner – 5:00 PM IST – Duration: 60 Mins (2nd Round) (Rescheduled from 24th)',
+  '7.\tLatha devi kunduru – Phone Interview – Hennepin Healthcare - Qual Perf Improve Data Analyst – 8:00 PM IST – Duration: 30 Mins (1st Round)',
+  '8.\tTara Menon – Interview – Fontainebleau Las Vegas - cyber security engineer – 12:00 AM IST – Duration: 30 Mins (1st Round)',
+  '9.\tGita Pillai -(UK)- Interview –Helping Hands Homecare-(Graduate Analytics Engineer)(Waiting for Invite)(1st round)',
+  '10.\tAnil Shetty - Interview - University of North Carolina Asheville - Linux Systems Administrator - Waiting For Invite',
+  '11.\tRavi Teja – Interview - EOS IT Solutions – Compliance Analyst – (1 st round, 30 mins) (Waiting for invite)Candidate own side',
+].join('\n\n');
+const dayRows = CORE.parseDocList(CORE.whatsappToDoc(dayList), { today: '2026-11-24', date: '2026-11-24' }).rows;
+
+test('daily list: "(25th Nov)" heading sets the date for every line', () => {
+  assert.equal(dayRows.length, 11);
+  assert.ok(dayRows.every(r => r.date === '2026-11-25'));
+});
+test('daily list: client and role after the client, multi-part and bracketed roles, statuses in notes', () => {
+  const at = i => dayRows[i - 1];
+  assert.deepEqual([at(1).client, at(1).role], ['Optimizely', 'Associate Business Systems Analyst']);
+  assert.deepEqual([at(3).client, at(3).role, at(3).notes], ['IVC Evidensia', 'Resource Planner - Data Analyst', 'Phone call']);
+  assert.deepEqual([at(4).client, at(4).role, at(4).notes], ['Regeneron', 'IT Applications Analyst Quality Systems', '']);
+  assert.deepEqual([at(5).loc, at(5).role, at(5).notes], ['IR', 'senior data engineer', 'Candidate Own Side']);
+  assert.deepEqual([at(6).client, at(6).role, at(6).round], ['Revolution Beauty', 'Demand Planner', 'Round 2']);
+  assert.deepEqual([at(8).time, at(8).date], ['00:00', '2026-11-25']);           // midnight stays on the 25th list
+  assert.deepEqual([at(9).client, at(9).role, at(9).notes, at(9).time], ['Helping Hands Homecare', 'Graduate Analytics Engineer', 'Waiting for Invite', '']);
+  assert.deepEqual([at(10).role, at(10).notes], ['Linux Systems Administrator', 'Waiting For Invite']);
+  assert.deepEqual([at(11).client, at(11).role, at(11).dur, at(11).round], ['EOS IT Solutions', 'Compliance Analyst', 30, 'Round 1']);
+});
+test('daily Tool Drive list: names written differently still match the right call and person', () => {
+  const calls = dayRows.filter(r => r.time).map((r, i) => ({ id: 100 + i, candidate: r.cand, client: r.client, round: r.round, time: r.time, toolDrive: '', toolDriveMemberId: null }));
+  const mem = ['Karthik Dhaniyala', 'Karthik Rao', 'Avinash Kumar', 'Naresh Kumar', 'HYD Lead'].map((n, i) => ({ id: i + 1, name: n, isCallPilot: true }));
+  const list = ['*HYD Team*', 'Meera Bhaskaran (UK) - 2:30', 'Rohan Varma Kota (UK) - 2:30 (*Karthik D*)', 'Latha Devi Kundurru - 8:00 (*Avinash*)',
+    'Tara Menon - 12:00', 'Someone Else - 1:30'].join('\n');
+  const r = CORE.matchToolDrive(CORE.parseToolDriveList(list), calls, mem, { HYD: mem[4] });
+  const by = n => r.find(x => x.e.name === n);
+  assert.equal(by('Meera Bhaskaran').call.candidate, 'Meera B');                 // initial
+  assert.equal(by('Meera Bhaskaran').member.name, 'HYD Lead');                    // team heading -> lead
+  assert.equal(by('Rohan Varma Kota').member.name, 'Karthik Dhaniyala');           // "Karthik D"
+  assert.equal(by('Latha Devi Kundurru').call.client, 'Hennepin Healthcare');      // spelling slip
+  assert.equal(by('Tara Menon').call.time, '00:00');                               // "12:00" after 8:00 PM = midnight
+  assert.equal(by('Someone Else').ok, false);
+});
+test('names: same person despite initials, short forms and small slips; different people stay apart', () => {
+  for (const [a, b] of [['Meera B', 'Meera Bhaskaran'], ['Rahul Vernon D', 'Rahul Vernon Dsouza'], ['Latha devi kunduru', 'Latha Devi Kundurru'],
+    ['Ammita Rao', 'Amita Rao'], ['Vikram Reddy', 'Vikram Reddy Choudary'], ['Sita Ram', 'Ram Sita']]) assert.ok(CORE.sameName(a, b), a + ' = ' + b);
+  for (const [a, b] of [['Kiran Kumar Gopalan', 'Kiran Kumar Nagaraju'], ['Anita Rao', 'Anand Kumar'], ['Sai Nag Pilla', 'Sai Dilip Kumar']])
+    assert.ok(!CORE.sameName(a, b), a + ' != ' + b);
+});
+test('heading dates', () => {
+  assert.equal(CORE.headingDate("Call's for tomorrow (25th Nov)", '2026-11-24'), '2026-11-25');
+  assert.equal(CORE.headingDate('October 5, 2026 (Monday)', '2026-11-24'), '2026-10-05');
+  assert.equal(CORE.headingDate('Calls for 2nd Jan', '2026-12-30'), '2027-01-02');
+  assert.equal(CORE.headingDate('Tomorrow calls', '2026-11-24'), '');
+});
+test('a new role is only flagged, never held (decision 25 Nov 2026)', () => {
+  const R = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'supabase', 'migrations', '20261125000002_callpilots_roles.sql'), 'utf8');
+  assert.match(R, /create or replace function public\.cp_import_interviews\(/);
+  assert.doesNotMatch(R, /kind := 'newrole'/);
+  assert.match(R, /'newRole', v_newrole/);
+  assert.doesNotMatch(html, /review_new_role/);
+  const sync = fs.readFileSync(path.join(__dirname, '..', '..', 'ttop', 'api', 'sync-doc.js'), 'utf8');
+  assert.doesNotMatch(sync, /'newrole'/);
+});

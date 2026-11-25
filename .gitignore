@@ -2,3 +2,6 @@ node_modules/
 .env
 data/
 *.log
+
+# real interview lists (candidate names) stay on this machine
+portals/callpilots/test/samples/

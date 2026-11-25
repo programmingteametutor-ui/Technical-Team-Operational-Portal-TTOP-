@@ -1,5 +1,5 @@
-// Doc sync: a line with a client or a role that is not in the portal yet is held on Import Review
-// (like a new candidate), never created automatically. Run: npm test
+// Doc sync: a line with a client that is not in the portal yet is held on Import Review (like a new
+// candidate), never created automatically. A new role is added as normal (roles are job titles). Run: npm test
 'use strict';
 const test = require('node:test'), assert = require('node:assert');
 process.env.SUPABASE_URL = 'http://sb.test'; process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-key';
@@ -12,7 +12,7 @@ const head = new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-US', { timeZ
 const doc = [head,
   'Ravi Kumar (UK)(Java Developer) – Interview – Initrode – 4:00 PM IST – Duration: 60 Mins (1st Round)-gopi',      // all known -> added
   'Ravi Kumar (UK)(Java Developer) – Interview – Newco Labs – 5:00 PM IST – Duration: 60 Mins (1st Round)-gopi',   // new client -> held
-  'Ravi Kumar (UK)(Rust Wizard) – Interview – Initrode – 6:00 PM IST – Duration: 60 Mins (2nd Round)-gopi',        // new role -> held
+  'Ravi Kumar (UK)(Rust Wizard) – Interview – Initrode – 6:00 PM IST – Duration: 60 Mins (2nd Round)-gopi',        // new role -> added
   'Unknown Person (UK)(Java Developer) – Interview – Initrode – 7:00 PM IST – Duration: 60 Mins (1st Round)-gopi'  // new candidate -> held
 ].join('\n');
 
@@ -33,17 +33,17 @@ global.fetch = async (url, o = {}) => {
   return res(201, null);
 };
 
-test('known candidate, client and role: added; new client / role / candidate: held, nothing created', async () => {
+test('known client: added (also with a new role); new client / candidate: held, no client created', async () => {
   const { S } = await runSync(false);
   const review = posts.import_review || [], kinds = review.map(r => r.payload.kind).sort();
-  assert.deepEqual(kinds, ['newc', 'newcl', 'newrole']);
+  assert.deepEqual(kinds, ['newc', 'newcl']);
   assert.ok(review.every(r => r.payload.hold === '1'));
   assert.equal(review.find(r => r.payload.kind === 'newcl').payload.client, 'Newco Labs');
-  assert.equal(review.find(r => r.payload.kind === 'newrole').payload.role, 'Rust Wizard');
-  assert.equal(S.added, 1);
-  assert.equal(S.held, 3);
+  assert.equal(S.added, 2);
+  assert.equal(S.held, 2);
   assert.equal((posts.clients || []).length, 0, 'no client is created automatically');
   const added = posts.interviews || [];
-  assert.equal(added.length, 1);
-  assert.equal(added[0].client_id, 10);
+  assert.equal(added.length, 2);
+  assert.ok(added.every(x => x.client_id === 10));
+  assert.ok(added.some(x => x.role === 'Rust Wizard'));
 });

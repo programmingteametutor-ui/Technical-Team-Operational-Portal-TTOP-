@@ -733,6 +733,7 @@ if(!rows.length)return $('#bp').innerHTML='<p class="er">No interview lines foun
 const nn=new Set();rows.forEach(r=>{const ex=bpm(r);r.client=clientCanon(r.client,clx);
 if(!r.time){r.sel=0;r.fl.push('No time, add manually')}
 if(!r.round){r.round='Round 1';r.fl.push('Round missing, set to Round 1')}
+if(!prRoleKnown(r.role))r.fl.push('New role: check the title');
 if(r.round=='Round 1'&&r.t1){r.tech='1';r.fl.push('Technical (1st round)')}
 if(ex&&!mine(ex)||!isA()&&r.poc&&r.poc!=(myT()||{}).name){r.sel=0;r.fl.push('Other POC, skipped')}
 else if(!ex){r.sel=0;if(!r.amb){nn.add(nm(r.cand));r.fl.push('Candidate not added yet')}}
@@ -746,7 +747,7 @@ bpA=k=>{const r=BP[k];AFTERC={name:r.cand,fn:()=>{BP.forEach(x=>{if(nm(x.cand)==
 bpx=()=>{const seen=new Set();BP.forEach(r=>{r.fl=r.fl.filter(f=>f!='Repeated in this paste');const k=[nm(r.cand),nm(r.client),r.round,r.date].join('|');if(seen.has(k)){r.fl.push('Repeated in this paste');r.sel=0}else seen.add(k)})},
 bpn=()=>{const n=BP.filter(r=>r.sel).length,a=$('#bp_all'),ok=BP.filter(r=>bpok(r)&&bpf(r));$('#bn').textContent=n;$('#bu').textContent=BP.length-n;if(a)a.checked=ok.length>0&&ok.every(r=>r.sel)},
 bpa=v=>{BP.filter(bpf).forEach(r=>{if(bpok(r))r.sel=v?1:0});document.querySelectorAll('.bpk').forEach(e=>{if(!e.disabled)e.checked=v});bpn()},
-bpc=r=>{r.fl=r.fl.filter(f=>f=='Merged duplicate line');r.client=clientCanon(r.client);const ex=bpm(r);let blk=0;
+bpc=r=>{r.fl=r.fl.filter(f=>f=='Merged duplicate line');r.client=clientCanon(r.client);const ex=bpm(r);let blk=0;if(!prRoleKnown(r.role))r.fl.push('New role: check the title');
 if(!r.time){blk=1;r.fl.push('No time, add manually')}
 if(ex&&!mine(ex)||!isA()&&r.poc&&r.poc!=(myT()||{}).name){blk=1;r.fl.push('Other POC, skipped')}
 else if(!ex){blk=1;if(!r.amb)r.fl.push('Candidate not added yet')}
@@ -772,7 +773,7 @@ regen();const ad_=sl.length-skd;L(`Imported ${ad_} interviews from doc${skd?', '
 async function bpFile(inp){const fs=[...inp.files];if(!fs.length)return;try{const t=await Promise.all(fs.map(f=>f.text()));$('#bi').value=t.join('\n\n');inp.value='';toast('Reading '+$('#bi').value.split('\n').length+' lines, please wait…');await new Promise(r=>setTimeout(r,60));bpp();toast(`Loaded ${fs.length} file${fs.length>1?'s':''}, check the preview below`)}catch(e){toast('Could not read the file')}}
 function bpAll(){if(!BP.length)return toast('Nothing to import');const tp=isA()?(($('#bp_poc')||{}).value||BPT||''):((myT()||{}).name||'');if(!isA()&&!tp)return toast('Your login is not linked to a team member');
 let add=0,skd=0,nc=0,rsn=0,dp=0,oth=0,miss=0;const rvw=[],rv1=(r,kind,extra)=>{const o0={...r,...(extra||{})};if(PR.concat(rvw).some(x=>x.kind==kind&&prSame(x,o0)))return;rvw.push({...prPay(r),rsId:'',kind,iid:'',xid:'',notes:r.notes||'',...extra,fl:[],sel:0,id:'n'+(++prn),db:0,by:me.name,reason:{dupe:'dupe',newc:'cand'}[kind]||'fix'})},act=x=>x.status!='Rescheduled'&&x.status!='Cancelled',ek=(c,cl,rd)=>nk(c)+'|'+nm(cl)+'|'+rd,
-cmap=new Map(),byR=new Map(),exact=new Set(),pend=new Set(),pdone=new Set(),cset=new Set(clients.map(nm)),rset=new Set(I.map(x=>rn(x.role)).filter(Boolean));let ncl=0,nro=0;
+cmap=new Map(),byR=new Map(),exact=new Set(),pend=new Set(),pdone=new Set(),cset=new Set(clients.map(nm));let ncl=0;
 C.forEach(c=>{const k=nk(c.name);if(!cmap.has(k))cmap.set(k,c)});
 const reg=x=>{const k=ek(x.cand,x.client,x.round);if(!act(x))return;if(!byR.has(k))byR.set(k,[]);byR.get(k).push(x);if(x.status=='Date Pending')pend.add(k);else exact.add(k+'|'+x.date+'|'+x.time)};
 I.forEach(reg);
@@ -784,17 +785,16 @@ if(!isA()&&r.poc&&!c&&r.poc!=tp){oth++;rv1(r,'skip',{msg:'Not imported: belongs 
 const noT=!r.time,st=noT?'Date Pending':(r.date<TODAY?'Completed':'Scheduled'),k=ek(r.cand,r.client,r.round);
 if(noT?pend.has(k):exact.has(k+'|'+r.date+'|'+r.time)){skd++;rv1(r,'skip',{msg:'Not imported: the same interview (candidate, client, round, date and time) already exists'});return}
 if(!c){nc++;rv1(r,'newc',{hold:'1',poc:r.poc||tp,client:clientCanon(r.client)});return}
-/* VERIFY FIRST (like a new candidate): a client or role not yet in the portal waits on Import Review */
+/* VERIFY FIRST (like a new candidate): a client not yet in the portal waits on Import Review (a new role is only flagged) */
 if(!cset.has(nm(r.client))){ncl++;rv1(r,'newcl',{hold:'1',poc:r.poc||c.poc||tp});return}
-if(rn(r.role)&&!rset.has(rn(r.role))){nro++;rv1(r,'newrole',{hold:'1',poc:r.poc||c.poc||tp});return}
 if(r.poc&&!pdone.has(r.poc)){pdone.add(r.poc);const m=pfind(r.poc)||team[team.push({name:r.poc,email:r.poc.toLowerCase().replace(/\s+/g,'.')+'@ttop.demo',poc:1,td:0,cs:0})-1];m.poc=1;if(!users.some(u=>u.email==m.email))users.push({email:m.email,name:m.name,role:'User',ok:1})}
 const ck=nm(r.client);if(!cset.has(ck)){cset.add(ck);clients.push(r.client)}
 const x=r.round=='Loop'?null:(byR.get(k)||[]).find(q=>roleEq(q.role,r.role));let o=null;const rs0=r.rsId?I.find(q=>q.id==r.rsId&&act(q)):null;if(rs0)o=rs0;else if(x&&['Scheduled','Date Pending','Completed'].includes(x.status)&&/resched/i.test(r.notes||''))o=x;else if(x){dp++;rv1(r,'dupe',{hold:'1',xid:x.id});return}
 const n={id:++iid,cand:c.name,role:r.role,client:r.client,date:noT?'':r.date,time:noT?'':r.time,dur:r.dur,round:r.round,type:r.type,tech:!!r.tech&&r.round=='Round 1',techBy:r.tech?(r.by=='Auto sync'?'Google Doc':'Doc line'):'',source:'Direct',assess:'',td:r.td,cs1:'',cs2:'',prep:r.prep,status:st,placement:'—',prev:o?o.id:'',notes:[r.notes,noT?'Time not in list ('+r.date+')':''].filter(Boolean).join(' · '),sheet:BPSD||''};
 I.push(n);if(o){o.status='Rescheduled';rsn++}if(noT)rv1(r,'time',{iid:n.id});reg(n);add++});
 if(rvw.length){PR.push(...rvw)}
-regen();L(`Imported ${add} interviews from doc${nc+dp+ncl+nro?', '+(nc+dp+ncl+nro)+' waiting for approval':''}${skd?', '+skd+' skipped (identical already exists)':''}`);BP=[];saved();go(rvw.length?'revm':'int');
-toast(`Imported ${add} interviews${nc?', '+nc+' lines with a new candidate are waiting for approval':''}${ncl?', '+ncl+' with a new client':''}${nro?', '+nro+' with a new role':''}${rsn?', '+rsn+' rescheduled':''}${dp?', '+dp+' same-round lines are waiting for approval':''}${skd?', '+skd+' skipped (identical already exists)':''}${oth?', '+oth+' skipped (other POC)':''}${miss?', '+miss+' not imported (client, candidate or date missing)':''}${rvw.length?'. '+rvw.length+' follow-up items are on the Import Review page':''}. Saving to the database…`)}
+regen();L(`Imported ${add} interviews from doc${nc+dp+ncl?', '+(nc+dp+ncl)+' waiting for approval':''}${skd?', '+skd+' skipped (identical already exists)':''}`);BP=[];saved();go(rvw.length?'revm':'int');
+toast(`Imported ${add} interviews${nc?', '+nc+' lines with a new candidate are waiting for approval':''}${ncl?', '+ncl+' with a new client':''}${rsn?', '+rsn+' rescheduled':''}${dp?', '+dp+' same-round lines are waiting for approval':''}${skd?', '+skd+' skipped (identical already exists)':''}${oth?', '+oth+' skipped (other POC)':''}${miss?', '+miss+' not imported (client, candidate or date missing)':''}${rvw.length?'. '+rvw.length+' follow-up items are on the Import Review page':''}. Saving to the database…`)}
 function buildOT(){if(!isAdm())return;OT.length=0;if(isA())return;const s=names();I.filter(i=>!s.has(nm(i.cand))).forEach(i=>OT.push({id:-i.id,cand:i.cand,role:i.role||'',client:i.client,date:i.date||'',time:i.time||'',dur:i.dur,round:i.round,type:i.type,status:i.status,pocName:poc(i),sheet:i.sheet||'',td:i.td||'',cs1:'',cs2:'',prep:i.prep||'',source:'',assess:'',placement:'—',prev:'',notes:''}));const k=OT.filter(x=>ourI(x)||!x.pocName);OT.length=0;k.forEach(x=>OT.push(x))}
 function sw(v){if(!isAdm())return;VW=v;try{localStorage.setItem('ttop_view_'+me.email,v)}catch(e){}buildOT();const adminOnly=NAV.some(n=>n[0]==cur&&n[2]);if(v=='User'&&adminOnly)cur='dash';go(cur)}
 

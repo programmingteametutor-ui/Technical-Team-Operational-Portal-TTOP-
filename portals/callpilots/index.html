@@ -129,7 +129,25 @@ var CORE = (function () {
      Lines:  Name (UK)(Role) – Interview – Client – 4:00 PM IST – Duration: 60 Mins (2nd Round)-gopi
      Headings like "October 5, 2026 (Monday)" set the date. */
   var TR = /(\d{1,2})(?:\s*[:.]\s*(\d{2}))?\s*([ap])\.?m\b/i;
-  var CT = /^\(?(uk|ireland|us|usa|canada|australia|uae|india)\)?$/i;
+  var CT = /^\(?(uk|ireland|ir|irl|us|usa|canada|australia|uae|india)\)?$/i;
+  var IVR = /\b(?:i?nterv[a-z]*|intrview\w*|intervew\w*)\b/i;
+  /* parts of a line that are not the client or the role (same rules as TTOP's Doc sync) */
+  var isMeta = function (x) {
+    return !x || IVR.test(x) || /^(?:phn|phone)?\s*(?:call|interview)s?$/i.test(x) || /^phn\b/i.test(x) || CT.test(x) || TR.test(x) ||
+      /^duration|round|^\d+\s*(?:mins?|hrs?)\b|elabor|eloborat|waiting|invit|own side|resched|founder/i.test(x);
+  };
+  var dash = function (s) { return String(s || "").replace(/^[\s\-–—]+|[\s\-–—:,]+$/g, "").trim(); };
+  /* "Call's for tomorrow (25th Nov)", "25 Nov 2026", "November 25" -> YYYY-MM-DD (year from today, or next year in January for a December list) */
+  function headingDate(ln, today) {
+    var a = /(?:^|[\s(])(\d{1,2})(?:st|nd|rd|th)?\s+([a-z]{3})[a-z]*\.?,?\s*(\d{4})?(?=[\s),.]|$)/i.exec(ln);
+    var b = /(?:^|[\s(])([a-z]{3})[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{4})?(?=[\s),.]|$)/i.exec(ln);
+    var d, mo, y;
+    if (a && MO.indexOf(a[2].toLowerCase()) >= 0) { d = +a[1]; mo = MO.indexOf(a[2].toLowerCase()) + 1; y = a[3]; }
+    else if (b && MO.indexOf(b[1].toLowerCase()) >= 0) { d = +b[2]; mo = MO.indexOf(b[1].toLowerCase()) + 1; y = b[3]; }
+    else return "";
+    if (!y) { y = +today.slice(0, 4); var tm = +today.slice(5, 7); if (tm === 12 && mo === 1) y++; else if (tm === 1 && mo === 12) y--; }
+    return y + "-" + pad(mo) + "-" + pad(d);
+  }
   var norm = function (l) {
     return l.replace(/\)\s*-(?=[^\s-])/g, ") - ").replace(/([A-Za-z])-(?=\s*\d{1,2}(?::\d{2}|\s*[ap]\.?m\b))/gi, "$1 - ")
       .replace(/([^\s-])-[ \t]+(?=\S)/g, "$1 - ").replace(/(\s)-(?=[^\s-])/g, " - ").replace(/[ \t]{2,}/g, " ");
@@ -145,16 +163,40 @@ var CORE = (function () {
       var org = ln;
       ln = ln.replace(/^\s*\d{1,3}\s*[.)]?\s*\t\s*/, "").replace(/^\s*\d{1,3}\s*[.)]\s+/, "").replace(/^\s*\d{1,3}\s{2,}(?=\S)/, "").trim();
       ln = norm(ln);
-      var iv = /interview/i.test(ln) || (/\b(phn|phone|phonecall|call)\b/i.test(ln) && (TR.test(ln) || /waiting|invite|round|duration/i.test(ln)));
-      var hd = /^([a-z]{3})[a-z]*\s+(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{4})?/i.exec(ln);
-      if (hd && !iv && MO.indexOf(hd[1].toLowerCase()) >= 0) { date = (hd[3] || today.slice(0, 4)) + "-" + pad(MO.indexOf(hd[1].toLowerCase()) + 1) + "-" + pad(+hd[2]); return; }
+      var iv = IVR.test(ln) || (/\b(phn|phone|phonecall|call)\b/i.test(ln) && (TR.test(ln) || /waiting|invite|round|duration/i.test(ln)));
       var m = new RegExp(sep).exec(ln);
-      if (!iv || !m) { if (/^\s*\d{1,3}\b/.test(org) && ln.length > 3) skipped.push(org.trim()); return; }
+      if (!iv || !m) {
+        // a heading: "October 5, 2026 (Monday)", "Call's for tomorrow (25th Nov)", "25 Nov 2026"
+        var hdDate = !iv && ln.length < 80 ? headingDate(ln, today) : "";
+        if (hdDate) { date = hdDate; return; }
+        if (/^\s*\d{1,3}\b/.test(org) && ln.length > 3) skipped.push(org.trim());
+        return;
+      }
       var s0 = ln.slice(0, m.index), rest = ln.slice(m.index + m[0].length);
       var par = Array.from(s0.matchAll(/\(([^)]*)\)/g)).map(function (x) { return x[1].trim(); });
-      var c2 = rest.split(new RegExp(sep)).map(function (x) { return x.replace(/\(.*$/, "").replace(/\s+/g, " ").trim(); }).find(function (x) {
-        return x && !/interview/i.test(x) && !/^(?:phn|phone)?\s*(?:call|interview)s?$/i.test(x) && !/^phn\b/i.test(x) && !CT.test(x) && !TR.test(x) && !/^duration|round/i.test(x);
-      }) || "";
+      // client = first part after the candidate that is not "Interview", a country, a time, a duration, a round or a status
+      var segs = rest.split(new RegExp(sep)).map(function (x) { return x.replace(/\s+/g, " ").trim(); });
+      var ci = segs.findIndex(function (x) { return !isMeta(x.replace(/\(.*$/, "").trim()); });
+      var raw = ci < 0 ? "" : segs[ci], c2 = dash(raw.replace(/\(.*$/, "")), role2 = "", roleParen = "";
+      var pr = Array.from(raw.matchAll(/\(([^)]*)\)/g)).map(function (x) { return x[1].trim(); }).find(function (x) { return x && !isMeta(x) && x.split(" ").length >= 2; });
+      if (pr) { role2 = pr; roleParen = pr; }                                                  // "Client-(Role)"
+      var cm = /^(.+?)-(?=[A-Z][a-z])(.+)$/.exec(c2);
+      if (cm && cm[2].trim().split(/\s+/).length >= 2) { c2 = dash(cm[1]); role2 = role2 || dash(cm[2]); }   // "Client-Role Name"
+      if (!role2 && ci >= 0) {                                                                 // "Client - Role - Role part - time"
+        var parts = [];
+        for (var j = ci + 1; j < segs.length; j++) {
+          var sj = segs[j], plain = dash(sj.replace(/\(.*$/, ""));
+          if (!plain) {                                                                        // "Client - (Role)"
+            var onlyPar = /^\(([^)]*)\)/.exec(sj);
+            if (!parts.length && onlyPar && !isMeta(onlyPar[1])) { parts.push(onlyPar[1].trim()); roleParen = onlyPar[1].trim(); }
+            break;
+          }
+          if (isMeta(plain) || TR.test(sj)) break;
+          parts.push(plain);
+          if (/\(/.test(sj)) break;                                                            // "Role (detail) (1st round)": stop at the brackets
+        }
+        role2 = parts.join(" - ");
+      }
       var client = c2 === c2.toLowerCase() ? tcase(c2) : c2;
       var tt = TR.exec(rest), hr = /(\d+(?:\.\d+)?)\s*(?:hrs?|hours?)\b/i.exec(rest), mn = /(\d+)\s*min/i.exec(rest), mins = (hr ? hr[1] * 60 : 0) + (mn ? +mn[1] : 0);
       var rdm = /(\d)\s*(?:st|nd|rd|th)?\s*round/i.exec(rest);
@@ -166,14 +208,19 @@ var CORE = (function () {
       var pcs = ln.split(new RegExp(sep)).map(function (x) { return x.trim(); });
       var isCall = pcs.some(function (x) { return /^(?:phn|phone)?\s*call$/i.test(x) || /^(?:phn|phone)\b/i.test(x); });
       var extra = Array.from(rest.matchAll(/\(([^)]*)\)/g)).map(function (x) { return x[1].trim(); })
-        .filter(function (x) { return x && !/round|^(?:loop|final)$|^\d+\s*mins?\b/i.test(x) && !/^el[ao]bor/i.test(x) && !CT.test(x); });
+        .filter(function (x) { return x && x !== roleParen && !/round|^(?:loop|final)$|^\d+\s*mins?\b/i.test(x) && !/^el[ao]bor/i.test(x) && !CT.test(x); });
+      // status words outside brackets ("- Waiting For Invite", ")Candidate own side")
+      segs.concat(rest.split(/\)/)).forEach(function (x) {
+        var w = dash(x.replace(/\([^)]*$/, "")).replace(/^.*?(waiting for invite|candidate own side|student own side)$/i, "$1");
+        if (/^(waiting for invite|candidate own side|student own side)$/i.test(w) && !extra.some(function (e) { return nm(e) === nm(w); })) extra.push(w);
+      });
       var time = "";
       if (tt) { var h = +tt[1], ap = tt[3].toLowerCase(); if (ap === "p" && h < 12) h += 12; if (ap === "a" && h === 12) h = 0; time = pad(h) + ":" + (tt[2] || "00"); }
       var poc = "";
       if (tdm) { var f = tdm[1].toLowerCase(), full = pocFull.filter(function (n) { return String(n).split(" ")[0].toLowerCase() === f; }); poc = full.length === 1 ? full[0] : tcase(tdm[1]); }
       var r = {
-        cand: tcase(s0.replace(/\(.*$/, "").replace(/[\s-]*(?:phn\s*|phone\s*)?interview\w*\s*$/i, "").replace(/[\s-]+$/, "")),
-        role: par.find(function (x) { return !CT.test(x); }) || "", loc: par.find(function (x) { return CT.test(x); }) || "",
+        cand: tcase(s0.replace(/\(.*$/, "").replace(/[\s-]*(?:phn\s*|phone\s*)?i?nterv\w*\s*$/i, "").replace(/[\s\-–—]+$/, "")),
+        role: par.find(function (x) { return !CT.test(x) && !IVR.test(x); }) || role2 || "", loc: par.find(function (x) { return CT.test(x); }) || "",
         client: client, date: date, time: time, dur: mins || 60, round: round || "Round 1", roundGiven: !!round, type: type,
         tech: /\btechnical\b/i.test(rest) && (round || "Round 1") === "Round 1", poc: poc,
         notes: [notes, isCall ? "Phone call" : ""].concat(extra).filter(Boolean).join(" · ")
@@ -239,14 +286,47 @@ var CORE = (function () {
     return mg;
   }
 
-  /* Team member for a name: exact full name, else a first name only one member has (never guessed). */
+  /* Team member for a name: exact full name; else a first name only one member has; else
+     "First Initial" ("Karthik D" -> Karthik Dhaniyala) when only one member fits. Never guessed. */
   function findMember(name, members) {
     var n = nm(name); if (!n) return null;
-    var ex = (members || []).filter(function (m) { return nm(m.name) === n; });
+    var L = members || [];
+    var ex = L.filter(function (m) { return nm(m.name) === n; });
     if (ex.length === 1) return ex[0];
-    if (ex.length > 1 || n.indexOf(" ") >= 0) return null;
-    var fn = (members || []).filter(function (m) { return nm(String(m.name).split(" ")[0]) === n; });
-    return fn.length === 1 ? fn[0] : null;
+    if (ex.length > 1) return null;
+    var words = strip(n).split(" ");
+    var fit = L.filter(function (m) {
+      var mw = strip(m.name).split(" ");
+      if (mw[0] !== words[0] || words.length > mw.length) return false;
+      for (var i = 1; i < words.length; i++) if (mw[i].indexOf(words[i]) !== 0) return false;
+      return true;
+    });
+    return fit.length === 1 ? fit[0] : null;
+  }
+
+  /* Edit distance (small strings) */
+  function lev(a, b) {
+    if (a === b) return 0;
+    if (Math.abs(a.length - b.length) > 2) return 9;
+    var d = [];
+    for (var i = 0; i <= a.length; i++) { d[i] = [i]; for (var j = 1; j <= b.length; j++) d[i][j] = i ? Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)) : j; }
+    return d[a.length][b.length];
+  }
+  /* Same person? Every word of the shorter name matches a different word of the longer one:
+     equal, an initial ("B" = "Bhaskaran"), a shortened word, or a spelling slip in a long word
+     ("Kunduru" = "Kundurru", "Ammita" = "Amita"). The first words must match. */
+  function sameName(a, b) {
+    var A = strip(a).split(" ").filter(Boolean), B = strip(b).split(" ").filter(Boolean);
+    if (!A.length || !B.length) return false;
+    if (nameKey(a) === nameKey(b)) return true;                       // same words, any order
+    if (A.length > B.length) { var t = A; A = B; B = t; }
+    var ok = function (x, y) { return x === y || (x.length === 1 && y[0] === x) || (y.length === 1 && x[0] === y) || (x.length >= 3 && y.indexOf(x) === 0) || (y.length >= 3 && x.indexOf(y) === 0) || (x.length >= 5 && y.length >= 5 && lev(x, y) <= 2); };
+    if (!ok(A[0], B[0]) && A.length > 1) return false;
+    var used = [];
+    return A.every(function (x) {
+      var k = B.findIndex(function (y, i) { return used.indexOf(i) < 0 && ok(x, y); });
+      if (k < 0) return false; used.push(k); return true;
+    }) && (A.length > 1 || A[0] === B[0]);
   }
   /* A team heading (*HYD Team*) -> the Call Pilots team it names, if any. */
   function teamOf(heading, teams) {
@@ -258,8 +338,7 @@ var CORE = (function () {
   function matchToolDrive(entries, calls, members, teamLeads) {
     return (entries || []).map(function (e, k) {
       var r = { k: k, e: e, call: null, member: null, fromTeam: false, ok: false, msg: "" };
-      var key = nameKey(e.name);
-      var mine = (calls || []).filter(function (c) { var ck = nameKey(c.candidate); return ck === key || (key && (ck.indexOf(key) === 0 || key.indexOf(ck) === 0)); });
+      var mine = (calls || []).filter(function (c) { return sameName(e.name, c.candidate); });
       var at = mine.filter(function (c) { return c.time === e.time; });
       if (at.length > 1) { r.msg = "Several interviews at this time: " + at.map(function (c) { return c.client; }).join(", "); return r; }
       if (at.length === 1) r.call = at[0];
@@ -291,7 +370,7 @@ var CORE = (function () {
 
   return { pad: pad, nm: nm, nameKey: nameKey, tcase: tcase, inr: inr, monthLabel: monthLabel, monthLong: monthLong, addDays: addDays,
     listToday: listToday, time12: time12, parseDocList: parseDocList, whatsappToDoc: whatsappToDoc, parseToolDriveList: parseToolDriveList,
-    tdRes: tdRes, findMember: findMember, teamOf: teamOf, matchToolDrive: matchToolDrive, groupCalls: groupCalls };
+    tdRes: tdRes, findMember: findMember, sameName: sameName, headingDate: headingDate, teamOf: teamOf, matchToolDrive: matchToolDrive, groupCalls: groupCalls };
 })();
 /* core:end */
 </script>
@@ -566,14 +645,14 @@ var CORE = (function () {
   }
   var RES = { added: ["Will be added", "added"], rescheduled: ["Reschedule of an existing interview", "rescheduled"], exists: ["Already in the portal", "mute"],
     review_new_candidate: ["New candidate: goes to Import Review", "review"], review_new_client: ["New client: goes to Import Review", "review"],
-    review_new_role: ["New role: goes to Import Review", "review"], review_duplicate: ["Same round exists: goes to Import Review", "review"],
+    review_duplicate: ["Same round exists: goes to Import Review", "review"],
     already_in_review: ["Already waiting in Import Review", "mute"], skipped: ["Skipped", "bad"], failed: ["Failed", "bad"] };
   function drawAdd(done) {
     var r = ADD.res, el = document.getElementById("a_r"); if (!r || !el) return;
     var p = ADD.parsed || { skipped: [], merged: 0 };
     var cnt = function (k) { return r.rows.filter(function (x) { return x.result === k; }).length; };
     var h = '<div class="card"><div class="ch"><div><b>' + (done ? "Imported" : "Preview") + '</b><small>' + ADD.rows.length + ' interviews read' + (p.merged ? ' · ' + p.merged + ' repeated lines merged' : '') +
-      ' · ' + (r.added + r.rescheduled) + (done ? ' added' : ' will be added') + ' · ' + r.review + (done ? ' sent' : ' go') + ' to Import Review · ' + r.skipped + ' skipped' + (r.failed ? ' · ' + r.failed + ' failed' : '') + '</small></div>' +
+      ' · ' + (r.added + r.rescheduled) + (done ? ' added' : ' will be added') + ' · ' + r.review + (done ? ' sent' : ' go') + ' to Import Review · ' + r.skipped + ' skipped' + (r.failed ? ' · ' + r.failed + ' failed' : '') + (r.rows.filter(function (x) { return x.newRole; }).length ? ' · ' + r.rows.filter(function (x) { return x.newRole; }).length + ' with a new role' : '') + '</small></div>' +
       (done ? '<button id="a_n">New import</button>' : '<button class="p" id="a_go"' + ((r.added + r.rescheduled + r.review) ? '' : ' disabled') + '>Import all</button>') + '</div>' +
       (p.skipped.length ? '<div class="cb err" style="font-size:12px">' + p.skipped.length + ' numbered line' + (p.skipped.length === 1 ? " was" : "s were") + ' not recognised: ' + p.skipped.slice(0, 5).map(esc).join(" · ") + '</div>' : '') +
       '<div class="cb scroll"><table class="resp"><thead><tr><th>Date</th><th>Time</th><th>Candidate</th><th>Role</th><th>Client</th><th>Round</th><th>POC</th><th>Result</th><th></th></tr></thead><tbody>' +
@@ -582,9 +661,9 @@ var CORE = (function () {
         var canRs = !done && s.result === "review_duplicate";
         return '<tr><td data-l="Date">' + esc(x.date) + '</td><td data-l="Time">' + C.time12(x.time) + '</td><td data-l="Candidate"><b>' + esc(x.cand) + '</b>' + (x.loc ? ' <small class="muted">(' + esc(x.loc) + ')</small>' : '') + '</td>' +
           '<td data-l="Role">' + esc(x.role || "—") + '</td><td data-l="Client">' + esc(x.client) + '</td><td data-l="Round">' + esc(x.round) + (x.roundGiven ? '' : ' <small class="muted">(not in line)</small>') + (x.tech ? ' <span class="pill">Technical</span>' : '') + '</td>' +
-          '<td data-l="POC">' + esc(x.poc || "—") + '</td><td data-l="Result"><span class="pill ' + R[1] + '">' + esc(R[0]) + '</span>' + (s.message ? '<div class="muted" style="font-size:12px">' + esc(s.message) + '</div>' : '') + (x.notes ? '<div class="muted" style="font-size:12px">' + esc(x.notes) + '</div>' : '') + '</td>' +
+          '<td data-l="POC">' + esc(x.poc || "—") + '</td><td data-l="Result"><span class="pill ' + R[1] + '">' + esc(R[0]) + '</span>' + (s.newRole ? ' <span class="pill w" title="This role has not been used on any interview yet. Check the title.">New role</span>' : '') + (s.message ? '<div class="muted" style="font-size:12px">' + esc(s.message) + '</div>' : '') + (x.notes ? '<div class="muted" style="font-size:12px">' + esc(x.notes) + '</div>' : '') + '</td>' +
           '<td>' + (canRs ? '<button class="sm" data-rs="' + i + '">It is a reschedule</button>' : x.mode === "reschedule" && !done ? '<button class="sm" data-un="' + i + '">Not a reschedule</button>' : '') + '</td></tr>';
-      }).join("") + '</tbody></table></div><div class="cb muted" style="font-size:12px">Same rules as TTOP: a new candidate, client or role, and a second line for a round that already exists, wait on TTOP\'s Import Review until someone checks them. An identical interview is never added twice, so importing the same list again adds nothing. Lines with no time are saved as Date Pending.</div></div>';
+      }).join("") + '</tbody></table></div><div class="cb muted" style="font-size:12px">Same rules as TTOP: a new candidate or client, and a second line for a round that already exists, wait on TTOP\'s Import Review until someone checks them. A new role is only tagged “New role” (check the title); it does not stop the import. An identical interview is never added twice, so importing the same list again adds nothing. Lines with no time are saved as Date Pending.</div></div>';
     el.innerHTML = h;
     var go = document.getElementById("a_go");
     if (go) go.onclick = function () {
