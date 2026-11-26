@@ -31,6 +31,7 @@ nav.side .foot{margin-top:auto;font-size:12px;opacity:.85;padding:10px 6px}nav.s
 .topbar{display:flex;justify-content:flex-end;align-items:center;gap:10px;padding:14px 26px 0}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff}
 .seg button{border:0;border-radius:0;padding:8px 14px;background:#fff}.seg button[aria-pressed=true]{background:var(--pri);color:#fff}
+.seg a{padding:8px 14px;text-decoration:none;color:var(--ink);font-weight:600}.seg a.on{background:var(--pri);color:#fff}.topbar .grow{flex:1}
 .head{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;justify-content:space-between;margin-bottom:16px}
 .head h1{margin:0;font-size:26px;letter-spacing:-.02em}.head p{margin:4px 0 0;color:var(--mute)}
 .ctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
@@ -387,7 +388,7 @@ var CORE = (function () {
 (function () {
   "use strict";
   var C = CORE, $root = document.getElementById("root");
-  var SB, ME = null, MEMBERS = null, STATE = { month: "", team: "", member: "" }, GEN = 0;
+  var SB, ME = null, APP = null, MEMBERS = null, STATE = { month: "", team: "", member: "" }, GEN = 0;
   var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); };
   var nf = function (n) { return Number(n || 0).toLocaleString("en-IN"); };
   var guard = function (fn) { var g = GEN; return function (x) { if (g === GEN) return fn(x); }; };
@@ -409,6 +410,8 @@ var CORE = (function () {
     SB = supabase.createClient(c.url, c.anon);
     SB.auth.getSession().then(function (r) {
       if (!r.data || !r.data.session) { location.href = "/?next=" + encodeURIComponent("/callpilots/" + location.hash); return; }
+      fetch("/app/api/me", { credentials: "same-origin" }).then(function (x) { return x.ok ? x.json() : null; })
+        .then(function (j) { if (j && j.user) { APP = j.user; if (ME) route(); } }).catch(function () {});
       return rpc("cp_me").then(function (me) {
         ME = me;
         ME.realAdmin = !!me.isAdmin;
@@ -436,9 +439,11 @@ var CORE = (function () {
     var nav = '<nav class="side"><div class="brand"><i>🏆</i><div><b>Call Pilots Operations Portal</b><small>' + esc(ME.isSuper ? "Super admin" : ME.isAdmin ? "Admin · " + ((ME.teams || []).join(", ") || "no team") : "Handler" + (ME.team ? " · " + ME.team : "")) + '</small></div></div>' +
       PAGES.filter(function (p) { return !p[3] || ME.isAdmin; }).map(function (p) { return '<a href="#' + p[0] + '" class="' + (p[0] === cur ? "on" : "") + '"><span>' + p[1] + '</span>' + (p[0] === "calls" && ME.isAdmin ? "Calls" : p[2]) + '</a>'; }).join("") +
       '<div class="foot">' + esc(ME.name) + (ME.team ? " · " + esc(ME.team) : "") + '<br><a href="/">Home</a> · <a href="/?signout=1">Sign out</a></div></nav>';
-    var sw = ME.realAdmin ? '<div class="topbar"><span class="muted" style="font-size:12px">View</span><div class="seg" role="group" aria-label="View">' +
+    var ps = APP && (APP.role === "admin" || APP.role === "super_admin") && (APP.portals || []).indexOf("ttop") >= 0
+      ? '<div class="seg" role="group" aria-label="Portal"><a href="/">Home</a><a href="/ttop/">TTOP</a><a class="on" aria-current="page">Call Pilots</a></div>' : '';
+    var sw = ME.realAdmin || ps ? '<div class="topbar">' + ps + '<span class="grow"></span>' + (ME.realAdmin ? '<span class="muted" style="font-size:12px">View</span><div class="seg" role="group" aria-label="View">' +
       '<button data-view="admin" aria-pressed="' + (STATE.view === "admin") + '">' + (ME.isSuper ? "Super admin view" : "Admin view") + '</button>' +
-      '<button data-view="mine" aria-pressed="' + (STATE.view === "mine") + '"' + (ME.memberId ? '' : ' disabled title="Your login is not in the Tool Drive list yet (People: give yourself a Call Pilots team)"') + '>My view</button></div></div>' : '';
+      '<button data-view="mine" aria-pressed="' + (STATE.view === "mine") + '"' + (ME.memberId ? '' : ' disabled title="Your login is not in the Tool Drive list yet (People: give yourself a Call Pilots team)"') + '>My view</button></div>' : '') + '</div>' : '';
     $root.innerHTML = '<div class="app">' + nav + '<div class="col">' + sw + '<main id="main"></main></div></div>';
     Array.prototype.forEach.call(document.querySelectorAll("[data-view]"), function (b) {
       b.onclick = function () {

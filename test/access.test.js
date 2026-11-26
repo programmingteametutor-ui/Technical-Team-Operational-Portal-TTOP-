@@ -136,3 +136,13 @@ test('Add Interviews adds directly: new candidate and client are created, with a
   assert.doesNotMatch(ttop, /rv1\(r,'newc',\{hold:'1'/);
   assert.match(ttop, /newC=true;L\('Added candidate '/);
 });
+
+test('portal switch for admins and super admins in both portals', () => {
+  const ttop = fs.readFileSync(path.join(__dirname, '..', 'portals', 'ttop', 'index.html'), 'utf8');
+  assert.match(ttop, /<div class="row">\$\{portSw\(\)\}/);
+  assert.match(ttop, /u\.role=='admin'\|\|u\.role=='super_admin'/);
+  assert.match(ttop, /<a href="\/callpilots\/">Call Pilots<\/a>/);
+  const cp = fs.readFileSync(path.join(__dirname, '..', 'portals', 'callpilots', 'index.html'), 'utf8');
+  assert.match(cp, /APP\.role === "admin" \|\| APP\.role === "super_admin"/);
+  assert.match(cp, /<a href="\/ttop\/">TTOP<\/a>/);
+});
