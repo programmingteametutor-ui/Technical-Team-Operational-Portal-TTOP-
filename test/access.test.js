@@ -146,3 +146,15 @@ test('portal switch for admins and super admins in both portals', () => {
   assert.match(cp, /APP\.role === "admin" \|\| APP\.role === "super_admin"/);
   assert.match(cp, /<a href="\/ttop\/">TTOP<\/a>/);
 });
+
+
+test('team board roster: linked or added in both portals, never a shared first name guessed', () => {
+  const sql = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '20261126000004_tooldrive_roster.sql'), 'utf8');
+  for (const n of ['Akhil', 'Anji', 'Karthikeya', 'Stephen', 'Uday', 'Vamshidhar', 'Avinash', 'Bharath', 'Dhruva', 'Karthik', 'Naresh', 'Pradeep Anna',
+    'Dilip B', 'Gopal', 'Gopi', 'Karthik D', 'Kishore', 'Kumar', 'N Sai', 'Pavan M', 'Vamsi P', 'Sameer', 'Uday D', 'Sai', 'Sandeep Anna']) assert.ok(sql.includes("('" + n + "',"), n);
+  assert.ok(sql.includes('set is_tool_drive = true, call_pilot_team = r.team, is_call_pilot = public.cp_is_cp_team(r.team)'));   // TTOP + Call Pilots
+  assert.ok(sql.includes('order by cardinality(regexp_split_to_array(btrim(name),'));                                            // "Karthik D" before "Karthik"
+  assert.ok(sql.includes('tm.id not in (select o.mid from cp_roster_out o'));                                                     // a person is claimed once
+  assert.ok(sql.includes('if nfit = 1 then'));                                                                                    // only when exactly one fits
+  assert.ok(sql.includes("btrim(coalesce(tm.tool_drive_alias, ''))"));                                                            // alias in matching
+});

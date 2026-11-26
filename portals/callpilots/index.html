@@ -302,6 +302,7 @@ var CORE = (function () {
     var n = nm(name); if (!n) return null;
     var L = members || [];
     var ex = L.filter(function (m) { return nm(m.name) === n; });
+    if (!ex.length) ex = L.filter(function (m) { return m.alias && nm(m.alias) === n; });   // short name from the team board ("Pavan M")
     if (ex.length === 1) return ex[0];
     if (ex.length > 1) return null;
     var words = strip(n).split(" ");
@@ -764,7 +765,7 @@ var CORE = (function () {
     // Call Pilots is only Pradeep Anna and HYD; everyone else who drives some calls is "Other" (no team shown, no app access)
     var CP = ["Pradeep Anna", "HYD"], cpTeams = ME.isSuper ? CP : (ME.teams || []).filter(function (t) { return CP.indexOf(t) >= 0; });
     var chip = function (m, faded) {
-      return '<span class="pill' + (faded ? ' mute' : '') + '" style="font-size:13px;padding:6px 10px;display:inline-flex;gap:8px;align-items:center" title="' + esc(m.email || "No app login") + '">' + esc(m.name) +
+      return '<span class="pill' + (faded ? ' mute' : '') + '" style="font-size:13px;padding:6px 10px;display:inline-flex;gap:8px;align-items:center" title="' + esc(m.email || "No app login") + '">' + esc(m.name) + (m.alias && CORE.nm(m.alias) !== CORE.nm(m.name) ? ' <small style="opacity:.7">(' + esc(m.alias) + ')</small>' : '') +
         ' <button class="sm" data-rm="' + m.id + '" aria-label="Remove ' + esc(m.name) + '" style="padding:0 6px;border:0;background:transparent">✕</button></span>';
     };
     var section = function (title, L, empty, faded) {

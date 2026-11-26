@@ -279,3 +279,10 @@ test('Calls page: only Today and Past calls not updated; admins can switch to My
   assert.match(html, /if \(ME\.realAdmin && !ME\.isAdmin\) return \{ p_month: STATE\.month \+ "-01", p_member: ME\.memberId \|\| -1, p_team: null \}/);   // My view = own data only
   assert.match(html, /ME\.isAdmin = ME\.realAdmin && STATE\.view === "admin"/);
 });
+
+test('a short name from the team board (alias) finds the person', () => {
+  const mem = [{ id: 1, name: 'Pavan Mockname', alias: 'Pavan M' }, { id: 2, name: 'Pavan Testa' }, { id: 3, name: 'Karthik Sample' }, { id: 4, name: 'Karthik Dummyson', alias: 'Karthik D' }];
+  assert.equal(CORE.findMember('Pavan M', mem).id, 1);
+  assert.equal(CORE.findMember('karthik d', mem).id, 4);
+  assert.equal(CORE.findMember('Pavan', mem), null);          // two Pavans: never guessed
+});
