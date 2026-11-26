@@ -775,32 +775,30 @@ var CORE = (function () {
     return ADD.rows.map(function (r) { return { cand: r.cand, client: r.client, role: r.role, date: r.date, time: r.time, dur: r.dur, round: r.round, type: r.type, poc: r.poc, notes: r.notes, tech: r.tech, mode: r.mode || "new" }; });
   }
   var RES = { added: ["Will be added", "added"], rescheduled: ["Reschedule of an existing interview", "rescheduled"], exists: ["Already in the portal", "mute"],
-    review_new_candidate: ["New candidate: goes to Import Review", "review"],
-    review_duplicate: ["Same round exists: goes to Import Review", "review"],
-    already_in_review: ["Already waiting in Import Review", "mute"], skipped: ["Skipped", "bad"], failed: ["Failed", "bad"] };
+    updated: ["Time filled on the Date Pending interview", "rescheduled"], skipped: ["Skipped", "bad"], failed: ["Failed", "bad"] };
   function drawAdd(done) {
     var r = ADD.res, el = document.getElementById("a_r"); if (!r || !el) return;
     var p = ADD.parsed || { skipped: [], merged: 0 };
     var cnt = function (k) { return r.rows.filter(function (x) { return x.result === k; }).length; };
     var h = '<div class="card"><div class="ch"><div><b>' + (done ? "Imported" : "Preview") + '</b><small>' + ADD.rows.length + ' interviews read' + (p.merged ? ' · ' + p.merged + ' repeated lines merged' : '') +
-      ' · ' + (r.added + r.rescheduled) + (done ? ' added' : ' will be added') + ' · ' + r.review + (done ? ' sent' : ' go') + ' to Import Review · ' + r.skipped + ' skipped' + (r.failed ? ' · ' + r.failed + ' failed' : '') + (r.rows.filter(function (x) { return x.newRole; }).length ? ' · ' + r.rows.filter(function (x) { return x.newRole; }).length + ' with a new role' : '') + '</small></div>' +
-      (done ? '<button id="a_n">New import</button>' : '<button class="p" id="a_go"' + ((r.added + r.rescheduled + r.review) ? '' : ' disabled') + '>Import all</button>') + '</div>' +
+      ' · ' + (r.added + r.rescheduled) + (done ? ' added' : ' will be added') + ' · ' + r.skipped + ' skipped' + (r.failed ? ' · ' + r.failed + ' failed' : '') + (r.rows.filter(function (x) { return x.newRole; }).length ? ' · ' + r.rows.filter(function (x) { return x.newRole; }).length + ' with a new role' : '') + '</small></div>' +
+      (done ? '<button id="a_n">New import</button>' : '<button class="p" id="a_go"' + ((r.added + r.rescheduled) ? '' : ' disabled') + '>Import all</button>') + '</div>' +
       (p.skipped.length ? '<div class="cb err" style="font-size:12px">' + p.skipped.length + ' numbered line' + (p.skipped.length === 1 ? " was" : "s were") + ' not recognised: ' + p.skipped.slice(0, 5).map(esc).join(" · ") + '</div>' : '') +
       '<div class="cb scroll"><table class="resp"><thead><tr><th>Date</th><th>Time</th><th>Candidate</th><th>Role</th><th>Client</th><th>Round</th><th>POC</th><th>Result</th><th></th></tr></thead><tbody>' +
       ADD.rows.map(function (x, i) {
         var s = r.rows[i] || {}, R = RES[s.result] || [s.result, "mute"];
-        var canRs = !done && s.result === "review_duplicate";
+        var canRs = !done && s.sameRound;
         return '<tr><td data-l="Date">' + esc(x.date) + '</td><td data-l="Time">' + C.time12(x.time) + '</td><td data-l="Candidate"><b>' + esc(x.cand) + '</b>' + (x.loc ? ' <small class="muted">(' + esc(x.loc) + ')</small>' : '') + '</td>' +
           '<td data-l="Role">' + esc(x.role || "—") + '</td><td data-l="Client">' + esc(x.client) + '</td><td data-l="Round">' + esc(x.round) + (x.roundGiven ? '' : ' <small class="muted">(not in line)</small>') + (x.tech ? ' <span class="pill">Technical</span>' : '') + '</td>' +
-          '<td data-l="POC">' + esc(x.poc || "—") + '</td><td data-l="Result"><span class="pill ' + R[1] + '">' + esc(R[0]) + '</span>' + (s.newRole ? ' <span class="pill w" title="This role has not been used on any interview yet. Check the title.">New role</span>' : '') + (s.newCandidate ? ' <span class="pill w" title="Added as a new candidate (name only); a Check row goes to TTOP Import Review">New candidate</span>' : '') + (s.newClient ? ' <span class="pill w" title="Added as a new client; a Check row goes to TTOP Import Review">New client</span>' : '') + (s.message ? '<div class="muted" style="font-size:12px">' + esc(s.message) + '</div>' : '') + (x.notes ? '<div class="muted" style="font-size:12px">' + esc(x.notes) + '</div>' : '') + '</td>' +
+          '<td data-l="POC">' + esc(x.poc || "—") + '</td><td data-l="Result"><span class="pill ' + R[1] + '">' + esc(R[0]) + '</span>' + (s.newRole ? ' <span class="pill w" title="This role has not been used on any interview yet. Check the title.">New role</span>' : '') + (s.newCandidate ? ' <span class="pill w" title="Added as a new candidate (name only); the interview card in TTOP asks to check it">New candidate</span>' : '') + (s.newClient ? ' <span class="pill w" title="Added as a new client; the interview card in TTOP asks to check it">New client</span>' : '') + (s.sameRound ? ' <span class="pill w" title="This round is already in the portal. Added as a separate interview unless you press It is a reschedule">Same round exists</span>' : '') + (s.message ? '<div class="muted" style="font-size:12px">' + esc(s.message) + '</div>' : '') + (x.notes ? '<div class="muted" style="font-size:12px">' + esc(x.notes) + '</div>' : '') + '</td>' +
           '<td>' + (canRs ? '<button class="sm" data-rs="' + i + '">It is a reschedule</button>' : x.mode === "reschedule" && !done ? '<button class="sm" data-un="' + i + '">Not a reschedule</button>' : '') + '</td></tr>';
-      }).join("") + '</tbody></table></div><div class="cb muted" style="font-size:12px">Interviews are added directly. A candidate or client that is not in the portal yet is created (tags “New candidate” / “New client”) and a Check row on TTOP\'s Import Review lets someone confirm it, with similar names suggested. Only a second line for a round that already exists waits there (add it as new or as a reschedule). A new role is only tagged “New role”. An identical interview is never added twice, so importing the same list again adds nothing. Lines with no time are saved as Date Pending.</div></div>';
+      }).join("") + '</tbody></table></div><div class="cb muted" style="font-size:12px">Every interview is added directly to Interviews. A candidate or client that is not in the portal yet is created (tags “New candidate” / “New client”), and a round that already exists is added as a separate interview (tag “Same round exists”, or press It is a reschedule). The interview card in TTOP then asks to check them, with similar names suggested. An identical interview is never added twice, so importing the same list again adds nothing. Lines with no time are saved as Date Pending.</div></div>';
     el.innerHTML = h;
     var go = document.getElementById("a_go");
     if (go) go.onclick = function () {
-      if (!confirm("Import " + (r.added + r.rescheduled) + " interview(s) and send " + r.review + " line(s) to Import Review?")) return;
+      if (!confirm("Add " + (r.added + r.rescheduled) + " interview(s) to Interviews?")) return;
       go.disabled = true; go.textContent = "Importing…";
-      rpc("cp_import_interviews", { p_rows: payload(), p_dry: false }).then(function (x) { ADD.res = x; drawAdd(true); toast(x.added + x.rescheduled + " added, " + x.review + " to Import Review"); })
+      rpc("cp_import_interviews", { p_rows: payload(), p_dry: false }).then(function (x) { ADD.res = x; drawAdd(true); toast((x.added + x.rescheduled) + " added" + (x.skipped ? ", " + x.skipped + " skipped" : "")); })
         .catch(function (e) { go.disabled = false; go.textContent = "Import all"; toast(e.message); });
     };
     var nw = document.getElementById("a_n"); if (nw) nw.onclick = function () { ADD = { tab: ADD.tab, text: "", date: ADD.date, rows: null, res: null }; pAdd(); };

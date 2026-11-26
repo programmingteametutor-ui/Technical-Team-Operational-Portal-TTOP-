@@ -162,11 +162,10 @@ async function runSync(dry) {
   const text = (await r.text()).replace(/^﻿/, '');
   if (!r.ok || /<html/i.test(text.slice(0, 1000))) throw new Error('Could not read the Google Doc. In the doc, click Share > General access > "Anyone with the link" (Viewer).');
 
-  const [team, cls, cands, ivs, seenRows, revRows] = await Promise.all([
+  const [team, cls, cands, ivs, seenRows] = await Promise.all([
     all('team_members', 'id,name'), all('clients', 'id,name'), all('candidates', 'id,name,technical_poc_id'),
     all('interviews', 'id,candidate_id,client_id,role,round,interview_date,interview_time,interview_status'),
-    rest('doc_sync_lines?select=key&limit=100000'),
-    rest('import_review?select=payload&limit=100000').catch(() => [])
+    rest('doc_sync_lines?select=key&limit=100000')
   ]);
   const tName = id => (team.find(t => t.id == id) || {}).name || '';
   const C = cands.map(c => ({ ...c, pocName: tName(c.technical_poc_id) })), CL = cls.slice(), I = ivs.map(x => ({ ...x, interview_time: (x.interview_time || '').slice(0, 5) }));
@@ -174,34 +173,39 @@ async function runSync(dry) {
   const roleList = [...new Set(I.map(x => String(x.role || '').trim()).filter(Boolean))];
   const pfind = n => n && team.find(t => nm(t.name) == nm(n) || nm(t.name.split(' ')[0]) == nm(n));
   let fake = -1; const S = { lines: rows.length, added: 0, updated: 0, rescheduled: 0, already: 0, newCands: 0, newClients: 0, pending: 0, review: 0, held: 0, old: 0, failed: 0, errors: [] };
-  const review = [], seenAdd = [], plans = [];
-  // a review row is never added twice (same candidate, client, round, date, time and kind)
-  const rkey = (p, kind) => [nk(p.cand), ckey(p.client), p.round, p.date, p.time, kind].join('|');
-  const revSeen = new Set((revRows || []).map(r => r.payload && rkey(r.payload, r.payload.kind)).filter(Boolean));
-  const rv = (row, kind, extra) => { const k = rkey({ ...row, ...(extra || {}) }, kind); if (revSeen.has(k)) return; revSeen.add(k); review.push({ reason: { dupe: 'dupe', newc: 'cand' }[kind] || 'fix', created_by: 'Auto sync', payload: { cand: row.cand, role: row.role, client: row.client, date: row.date, time: row.time, dur: row.dur + ' Minutes', round: row.round, type: row.type, td: '', poc: row.poc, prep: row.prep, notes: row.notes, loc: row.loc, rsId: '', kind, iid: '', xid: '', msg: '', hold: '', tech: row.tech ? '1' : '', ...extra } }) };
+  // No Import Review (2026-11-26): every line is added directly. Something worth a look (new
+  // candidate, new client, new role, same round already there) is stored on the interview
+  // itself (interviews.import_check) and shown on its card in TTOP.
+  const seenAdd = [], plans = [], skippedLines = [];
 
   for (const row of rows) {
     // only interviews from today onwards: older lines in the doc are never imported or sent to review
     if (row.date && row.date < today) { S.old++; continue }
     const key = [nk(row.cand), ckey(row.client), row.round, row.date, row.time].join('|');
     if (seen.has(key)) { S.already++; continue }
-    if (!row.cand || !row.client || !row.date) { rv(row, 'skip', { msg: 'Not imported: ' + (!row.client ? 'client' : !row.cand ? 'candidate' : 'date') + ' is missing in the doc line' }); seen.add(key); seenAdd.push({ key, action: 'skipped' }); continue }
+    if (!row.cand || !row.client || !row.date) { S.skipped = (S.skipped || 0) + 1; skippedLines.push((row.cand || '?') + ' · ' + (row.client || '?') + ': ' + (!row.client ? 'client' : !row.cand ? 'candidate' : 'date') + ' is missing in the doc line'); seen.add(key); seenAdd.push({ key, action: 'skipped' }); continue }
 
     // candidate (never duplicated: same matching as the portal)
-    const c = candFind(row.cand, C, row.poc).c || oneWord(row, C, I, CL);
-    // VERIFY FIRST: a candidate who is not in the portal is NOT created automatically.
-    // The line waits on Import Review ("Waiting for approval") until someone checks the name and adds it.
-    if (!c) { rv(row, 'newc', { hold: '1', client: clientCanon(row.client, CL.map(x => x.name)) }); S.held++; seen.add(key); seenAdd.push({ key, action: 'held' }); continue }
+    let c = candFind(row.cand, C, row.poc).c || oneWord(row, C, I, CL), newCand = false;
+    // a candidate who is not in the portal is created (name + Technical POC); the card asks to check it
+    if (!c) {
+      const pocM = pfind(row.poc), body = { name: clean(row.cand), technical_poc_id: pocM ? pocM.id : null };
+      if (dry) c = { id: fake--, name: body.name, technical_poc_id: body.technical_poc_id };
+      else {
+        try { c = (await rest('candidates', { method: 'POST', body, prefer: 'return=representation' }))[0] }
+        catch (e) { const f = (await all('candidates', 'id,name,technical_poc_id')).find(x => nk(x.name) == nk(row.cand)); if (!f) { S.failed++; S.errors.push(row.cand + ': ' + e.message); continue } c = f }
+      }
+      c = { ...c, pocName: tName(c.technical_poc_id) }; C.push(c); S.newCands++; newCand = true;
+    }
     // client: matched to an existing client first (same name, "Inc/Ltd" ignored, small spelling slips).
-    // A client that is still new is created and the interview is added; Import Review then shows a
-    // "Check client" row (with similar clients) so someone can confirm it. Only a new candidate waits.
+    // A client that is still new is created; the card asks to check it (similar clients suggested).
     const cn = clientCanon(row.client, CL.map(x => x.name)); let cl = CL.find(x => x.name == cn), newClient = false;
     if (!cl) {
       if (dry) cl = { id: fake--, name: cn };
       else { try { cl = (await rest('clients', { method: 'POST', body: { name: clean(cn) }, prefer: 'return=representation' }))[0] } catch (e) { const f = (await all('clients', 'id,name')).find(x => nm(x.name) == nm(cn) || ckey(x.name) == ckey(cn)); if (!f) { S.failed++; S.errors.push(cn + ': ' + e.message); continue } cl = f } }
       CL.push(cl); S.newClients++; newClient = true;
     }
-    // role: never stops the line; a role that looks like a misspelt existing one gets a "Check role" row
+    // role: never stops the line; a role never used before is flagged on the card
     const simRole = similarRole(row.role, roleList);
     const noT = !row.time, mine = I.filter(x => x.candidate_id == c.id && x.client_id == cl.id && x.round == row.round);
     // already in the portal in any status (so a cancelled or deleted interview is not brought back)
@@ -216,18 +220,23 @@ async function runSync(dry) {
       S.updated++; seen.add(key); seenAdd.push({ key, action: 'updated', interview_id: x.id > 0 ? x.id : null }); continue;
     }
     const rs = x && /resched/i.test(row.notes || '') && ['Scheduled', 'Date Pending', 'Completed'].includes(x.interview_status) ? x : null;
-    // VERIFY FIRST: same candidate + client + round already exists and the doc does not say "reschedule":
-    // not added; waits on Import Review so someone can add it as new, mark it a reschedule, or delete it.
-    if (x && !rs) { rv(row, 'dupe', { hold: '1', client: cl.name, xid: x.id > 0 ? x.id : '' }); S.held++; seen.add(key); seenAdd.push({ key, action: 'held' }); continue }
+    // same candidate + client + round already exists and the doc does not say "reschedule": added as a
+    // separate interview; the card asks "Is this a reschedule?"
+    const dupe = x && !rs ? x : null;
+    const newRole = !!clean(row.role) && !roleList.some(q => nm(q) == nm(row.role));
+    const chk = newCand || newClient || newRole || simRole || dupe
+      ? Object.fromEntries(Object.entries({ newCandidate: newCand || undefined, newClient: newClient || undefined, newRole: newRole || undefined,
+          role: simRole || undefined, dupe: dupe && dupe.id > 0 ? dupe.id : undefined, src: 'Google Doc' }).filter(e => e[1] !== undefined)) : null;
     const body = {
       candidate_id: c.id, role: clean(row.role) || null, client_id: cl.id, interview_date: noT ? null : row.date, interview_time: noT ? null : row.time,
       duration_minutes: row.dur, round: row.round, interview_type: row.type, source: 'Direct', prep_status: row.prep, interview_status: status,
       notes: clean([row.notes, noT ? 'Time not in doc (' + row.date + ')' : ''].filter(Boolean).join(' · ')) || null, rescheduled_from: rs ? rs.id : null, sheet_date: sheetDate,
-      ...(row.tech ? { is_technical: true, marked_technical_by: 'Google Doc' } : {})
+      ...(row.tech ? { is_technical: true, marked_technical_by: 'Google Doc' } : {}),
+      ...(chk ? { import_check: chk } : {})
     };
     const ph = { id: 0, candidate_id: c.id, client_id: cl.id, role: row.role, round: row.round, interview_date: body.interview_date, interview_time: body.interview_time || '', interview_status: status };
     I.push(ph); seen.add(key);
-    plans.push({ row, key, body, ph, rs, newClient, simRole, clientName: cl.name });
+    plans.push({ row, key, body, ph, rs, chk });
     if (row.role && !roleList.includes(row.role)) roleList.push(row.role);
   }
 
@@ -235,13 +244,10 @@ async function runSync(dry) {
   const done = (p, id) => {
     p.ph.id = id; S.added++; if (p.rs) { S.rescheduled++ } if (!p.body.interview_date) S.pending++;
     seenAdd.push({ key: p.key, action: p.rs ? 'rescheduled' : 'added', interview_id: id > 0 ? id : null });
-    if (!p.body.interview_date) rv(p.row, 'time', { iid: id });
-    // added, but worth a look: a new client, or a role that looks like a misspelt existing one
-    if (p.newClient || p.simRole) rv(p.row, 'chk', { iid: id, client: p.clientName,
-      msg: [p.newClient ? 'New client “' + p.clientName + '” was added' : '', p.simRole ? 'Role “' + p.row.role + '” looks like “' + p.simRole + '”' : ''].filter(Boolean).join('. ') });
+    if (p.chk) S.toCheck = (S.toCheck || 0) + 1;
   };
   // rows marked technical carry two extra columns: keep them together so batches have matching keys
-  plans.sort((a, b) => (a.row.tech ? 1 : 0) - (b.row.tech ? 1 : 0));
+  plans.sort((a, b) => ((a.row.tech ? 2 : 0) + (a.chk ? 1 : 0)) - ((b.row.tech ? 2 : 0) + (b.chk ? 1 : 0)));
   for (let i = 0; i < plans.length; i += 200) {
     const ch = plans.slice(i, i + 200);
     if (dry) { ch.forEach(p => done(p, fake--)); continue }
@@ -251,21 +257,22 @@ async function runSync(dry) {
       try { const d = await rest('interviews?select=id', { method: 'POST', body: p.body, prefer: 'return=representation' }); done(p, d[0].id) }
       catch (e0) {
         // technical calls part not in the database yet: add the interview without the technical mark
+        // optional columns not in the database yet (technical mark, import check): add without them
         let e = e0;
-        if (p.row.tech && /is_technical|marked_technical/.test(e0.message || '')) {
-          const { is_technical, marked_technical_by, ...b2 } = p.body;
+        if (/is_technical|marked_technical|import_check/.test(e0.message || '')) {
+          const { is_technical, marked_technical_by, import_check, ...b2 } = p.body;
           try { const d = await rest('interviews?select=id', { method: 'POST', body: b2, prefer: 'return=representation' }); done(p, d[0].id); continue } catch (e1) { e = e1 }
         }
-        S.failed++; S.errors.push(p.row.cand + ' · ' + p.row.client + ': ' + e.message); rv(p.row, 'skip', { msg: 'Not imported: ' + e.message }); seenAdd.push({ key: p.key, action: 'failed' })
+        S.failed++; S.errors.push(p.row.cand + ' · ' + p.row.client + ': ' + e.message); seenAdd.push({ key: p.key, action: 'failed' })
       }
     }
   }
   if (!dry) {
     for (const p of plans) if (p.rs && p.ph.id > 0) await rest(`interviews?id=eq.${p.rs.id}`, { method: 'PATCH', body: { interview_status: 'Rescheduled' } });
     for (let i = 0; i < seenAdd.length; i += 500) await rest('doc_sync_lines?on_conflict=key', { method: 'POST', body: seenAdd.slice(i, i + 500).map(x => ({ interview_id: null, ...x, run_at: now.toISOString() })), prefer: 'resolution=ignore-duplicates,return=minimal' });
-    for (let i = 0; i < review.length; i += 300) { try { await rest('import_review', { method: 'POST', body: review.slice(i, i + 300), prefer: 'return=minimal' }) } catch (e) { S.errors.push('Import Review: ' + e.message) } }
   }
-  S.review = review.length;
+  S.review = S.toCheck || 0;   // interviews whose card asks for a check
+  if (skippedLines.length) S.errors.push(...skippedLines.slice(0, 10).map(x => 'Not imported: ' + x));
   return { S, now, sample: dry ? rows.slice(0, 15) : undefined };
 }
 
@@ -288,7 +295,7 @@ async function repairSync() {
 const summary = (S, when) => [
   `Sheet updated at ${when}`,
   `New interviews: ${S.added}${S.rescheduled ? ` (${S.rescheduled} rescheduled)` : ''} · Times filled: ${S.updated} · Already in portal: ${S.already}`,
-  `Waiting for approval: ${S.held} · Date pending: ${S.pending} · Import Review: ${S.review}${S.failed ? ` · Failed: ${S.failed}` : ''}`
+  `New candidates: ${S.newCands} · Date pending: ${S.pending} · To check on the card: ${S.review}${S.skipped ? ` · Not imported: ${S.skipped}` : ''}${S.failed ? ` · Failed: ${S.failed}` : ''}`
 ].join('\n');
 
 module.exports = async (req, res) => {
@@ -303,7 +310,7 @@ module.exports = async (req, res) => {
     const { S, sample } = await runSync(dry), when = istStamp(started), msg = summary(S, when);
     if (!dry) {
       await rest('sync_runs', { method: 'POST', body: { ok: true, added: S.added, updated: S.updated, skipped: S.already, new_candidates: S.newCands, review: S.review, failed: S.failed, triggered_by: who, message: msg, error: S.errors.slice(0, 20).join('\n') || null }, prefer: 'return=minimal' });
-      await rest('activity_log', { method: 'POST', body: { actor_email: 'auto-sync', actor_name: 'Auto sync', action: `Doc sync (${when}): ${S.added} added, ${S.updated} times filled, ${S.held} waiting for approval, ${S.review} to review` }, prefer: 'return=minimal' }).catch(() => { });
+      await rest('activity_log', { method: 'POST', body: { actor_email: 'auto-sync', actor_name: 'Auto sync', action: `Doc sync (${when}): ${S.added} added, ${S.updated} times filled, ${S.newCands} new candidates, ${S.review} to check` }, prefer: 'return=minimal' }).catch(() => { });
     }
     return res.status(200).json({ ok: true, dry, when, ...S, message: msg, sample });
   } catch (e) {

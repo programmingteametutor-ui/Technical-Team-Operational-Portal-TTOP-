@@ -121,7 +121,7 @@ test('only a new candidate waits; Call Pilots admins see all calls of their team
   assert.match(page, /href="#assign">⇄ Assign Interviews/);
   const ttop = fs.readFileSync(path.join(__dirname, '..', 'portals', 'ttop', 'index.html'), 'utf8');
   assert.doesNotMatch(ttop, /rv1\(r,'newcl'/);
-  assert.match(ttop, /rv1\(r,'chk',/);
+  assert.doesNotMatch(ttop, /function bpAll\(\)[^\n]*rv1\(/);   // pasted lists never hold a line (no Import Review)
 });
 
 test('Add Interviews adds directly: new candidate and client are created, with a Check row', () => {
@@ -181,4 +181,29 @@ test('Call Pilots edit and delete: admins edit everything and delete, handlers e
   assert.match(page, /ME\.isAdmin \? '<button class="sm d" data-a="delete"/);
   assert.match(page, /rpc\("cp_edit_call"/);
   assert.match(page, /rpc\("cp_delete_call"/);
+});
+
+test('no Import Review: every import adds directly and the interview card carries the check', () => {
+  const sql = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '20261126000006_no_import_review.sql'), 'utf8');
+  assert.match(sql, /alter table public\.interviews add column if not exists import_check jsonb/);
+  const imp = sql.slice(sql.indexOf('function public.cp_import_interviews('));
+  assert.doesNotMatch(imp, /insert into import_review/);                       // Call Pilots never holds a line
+  assert.doesNotMatch(imp, /'review_/);
+  assert.match(imp, /v_dupe := has_prev and not/);                            // same round: added, flagged
+  assert.match(imp, /'dupe', case when v_dupe then ex\.id end/);
+  assert.match(imp, /res := 'updated'/);                                       // a Date Pending interview gets its time
+  const ttop = fs.readFileSync(path.join(__dirname, '..', 'portals', 'ttop', 'index.html'), 'utf8');
+  assert.doesNotMatch(ttop, /\['rev','Review',2\]/);                            // no Review page in the menu
+  assert.match(ttop, /\['Interviews',\['int','add','sync'\]\]/);
+  assert.match(ttop, /P\.rev=P\.revm=\(\)=>\{cur='int';return P\.int\(\)\}/);    // old links open Interviews
+  assert.match(ttop, /\['chk','To check',chkL\(\)\]/);                          // "To check" tab
+  assert.match(ttop, /\$\{chkB\(i\)\}<div class="mu smt">POC/);                  // the check on the card
+  assert.match(ttop, /chk:x\.import_check\|\|null/);                            // loaded ...
+  assert.match(ttop, /\.\.\.\(CHKDB\?\{import_check:/);                         // ... and saved
+  for (const f of ['ckOff', 'ckUse', 'ckRs', 'ckCd', 'prAddOld', 'prClearOld']) assert.ok(ttop.includes('function ' + f + '('), f);
+  assert.match(ttop, /else if\(x\)dupe=x;/);                                     // pasted list: same round added, flagged
+  assert.match(ttop, /<button onclick="lcMiss\(-1\)">Add all to Interviews<\/button>/);
+  const cp = fs.readFileSync(path.join(__dirname, '..', 'portals', 'callpilots', 'index.html'), 'utf8');
+  assert.doesNotMatch(cp, /Import Review/);
+  assert.match(cp, /var canRs = !done && s\.sameRound;/);
 });
