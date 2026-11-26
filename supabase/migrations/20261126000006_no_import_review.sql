@@ -169,3 +169,6 @@ end $$;
 
 revoke all on function public.cp_import_interviews(jsonb, boolean) from public, anon;
 grant execute on function public.cp_import_interviews(jsonb, boolean) to authenticated;
+
+-- let the API see the new functions straight away
+notify pgrst, 'reload schema';

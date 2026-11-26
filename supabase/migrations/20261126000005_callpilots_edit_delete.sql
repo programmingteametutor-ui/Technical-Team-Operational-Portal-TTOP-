@@ -225,3 +225,6 @@ begin
   revoke all on function public.cp_edit_call(bigint, jsonb), public.cp_delete_call(bigint, text), public.cp_my_calls(bigint) from public, anon;
   grant execute on function public.cp_edit_call(bigint, jsonb), public.cp_delete_call(bigint, text), public.cp_my_calls(bigint) to authenticated;
 end $g$;
+
+-- let the API see the new functions straight away
+notify pgrst, 'reload schema';

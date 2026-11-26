@@ -127,3 +127,6 @@ end $g$;
 
 -- Result: what happened to every name on the board
 select team, name, result, member from cp_roster_out order by team, name;
+
+-- let the API see the new functions straight away
+notify pgrst, 'reload schema';
