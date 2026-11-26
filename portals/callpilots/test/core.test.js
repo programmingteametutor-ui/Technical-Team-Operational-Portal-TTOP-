@@ -265,3 +265,9 @@ test('Tool Drive list copied with WhatsApp prefixes keeps headings and (*Name*) 
   assert.deepEqual(b.map(x => [x.name, x.time, x.tool, x.grp]), [
     ['Asha Kiran Rao', '14:30', '', 'HYD Team'], ['Meera Bhaskaran', '19:00', 'Karthik D', 'HYD Team'], ['Tara Menon', '12:00', '', 'Pradeep Anna Team']]);   // first line after a heading: noon (TTOP rule)
 });
+test('"4.Name" (no space after the number) is read without the number', () => {
+  const p = CORE.parseDocList('4.Asha Kiran Rao (ireland) – Interview – Google – 6:30 PM IST – Duration: 1HR (1st Round)', { today: '2026-11-26' });
+  assert.equal(p.rows[0].cand, 'Asha Kiran Rao');
+  assert.equal(p.rows[0].loc, 'ireland');
+  assert.equal(p.rows[0].dur, 60);
+});

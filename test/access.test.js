@@ -123,3 +123,16 @@ test('only a new candidate waits; Call Pilots admins see all calls of their team
   assert.doesNotMatch(ttop, /rv1\(r,'newcl'/);
   assert.match(ttop, /rv1\(r,'chk',/);
 });
+
+test('Add Interviews adds directly: new candidate and client are created, with a Check row', () => {
+  const sql = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '20261126000003_add_directly.sql'), 'utf8');
+  const imp = sql.slice(sql.indexOf('function public.cp_import_interviews('), sql.lastIndexOf('end $$'));
+  assert.doesNotMatch(imp, /kind := 'newc'/);
+  assert.match(imp, /insert into candidates \(name, technical_poc_id\) values \(v_cand, public\.cp_match_member\(v_poc\)\)/);
+  assert.match(imp, /insert into clients \(name\) values \(v_client\)/);
+  assert.match(imp, /if v_newclient or v_newcand then/);
+  assert.match(imp, /kind := 'dupe'/);                                  // a same-round second line still waits
+  const ttop = fs.readFileSync(path.join(__dirname, '..', 'portals', 'ttop', 'index.html'), 'utf8');
+  assert.doesNotMatch(ttop, /rv1\(r,'newc',\{hold:'1'/);
+  assert.match(ttop, /newC=true;L\('Added candidate '/);
+});
