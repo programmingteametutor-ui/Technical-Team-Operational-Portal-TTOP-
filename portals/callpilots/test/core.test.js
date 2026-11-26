@@ -271,3 +271,11 @@ test('"4.Name" (no space after the number) is read without the number', () => {
   assert.equal(p.rows[0].loc, 'ireland');
   assert.equal(p.rows[0].dur, 60);
 });
+test('Calls page: only Today and Past calls not updated; admins can switch to My view', () => {
+  assert.match(html, /sec\("today", "Today"\) \+\s*sec\("notUpdated", "Past calls not updated"/);
+  assert.doesNotMatch(html, /sec\("tomorrow"|sec\("week"/);
+  assert.match(html, /data-view="admin"/);
+  assert.match(html, /data-view="mine"/);
+  assert.match(html, /if \(ME\.realAdmin && !ME\.isAdmin\) return \{ p_month: STATE\.month \+ "-01", p_member: ME\.memberId \|\| -1, p_team: null \}/);   // My view = own data only
+  assert.match(html, /ME\.isAdmin = ME\.realAdmin && STATE\.view === "admin"/);
+});

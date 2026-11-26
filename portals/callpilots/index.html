@@ -27,7 +27,10 @@ nav.side{width:240px;flex:none;background:linear-gradient(180deg,var(--nav),var(
 nav.side a{display:flex;gap:10px;align-items:center;color:#dbe4ff;text-decoration:none;padding:11px 12px;border-radius:12px;margin:2px 0;font-weight:500}
 nav.side a.on{background:var(--pri);color:#fff}nav.side a:hover{background:rgba(255,255,255,.08)}
 nav.side .foot{margin-top:auto;font-size:12px;opacity:.85;padding:10px 6px}nav.side .foot a{display:inline;padding:0;color:#c7d2fe}
-main{flex:1;min-width:0;padding:22px 26px 90px}
+.col{flex:1;min-width:0}main{min-width:0;padding:8px 26px 90px}
+.topbar{display:flex;justify-content:flex-end;align-items:center;gap:10px;padding:14px 26px 0}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff}
+.seg button{border:0;border-radius:0;padding:8px 14px;background:#fff}.seg button[aria-pressed=true]{background:var(--pri);color:#fff}
 .head{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;justify-content:space-between;margin-bottom:16px}
 .head h1{margin:0;font-size:26px;letter-spacing:-.02em}.head p{margin:4px 0 0;color:var(--mute)}
 .ctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
@@ -76,7 +79,7 @@ dialog .row{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
 .foot2{display:flex;justify-content:space-between;color:var(--mute);font-size:11px;margin-top:8px;gap:10px;flex-wrap:wrap}
 @media (max-width:1100px){.tiles{grid-template-columns:repeat(3,1fr)}.itiles{grid-template-columns:repeat(2,1fr)}.grid3,.grid2{grid-template-columns:1fr}}
 @media (max-width:760px){
- .app{display:block}main{padding:14px 12px 96px}
+ .app{display:block}main{padding:8px 12px 96px}.topbar{padding:10px 12px 0}
  nav.side{position:fixed;bottom:0;top:auto;left:0;right:0;width:auto;height:auto;flex-direction:row;padding:6px;z-index:20;overflow-x:auto;border-radius:16px 16px 0 0}
  nav.side .brand,nav.side .foot{display:none}nav.side a{flex:1 0 auto;flex-direction:column;gap:2px;font-size:11px;padding:8px 10px;text-align:center}
  .head h1{font-size:21px}.tiles{grid-template-columns:repeat(2,1fr);padding:10px;gap:8px}.tile b{font-size:22px}
@@ -408,6 +411,9 @@ var CORE = (function () {
       if (!r.data || !r.data.session) { location.href = "/?next=" + encodeURIComponent("/callpilots/" + location.hash); return; }
       return rpc("cp_me").then(function (me) {
         ME = me;
+        ME.realAdmin = !!me.isAdmin;
+        try { STATE.view = localStorage.getItem("cp_view") === "mine" && me.memberId ? "mine" : "admin"; } catch (e) { STATE.view = "admin"; }
+        ME.isAdmin = ME.realAdmin && STATE.view === "admin";
         ME.teams = (me.teams || []).filter(isCpTeam);
         if (me.team && !isCpTeam(me.team)) ME.team = null;
         STATE.month = (me.months || [])[0] || C.listToday().slice(0, 7);
@@ -430,7 +436,18 @@ var CORE = (function () {
     var nav = '<nav class="side"><div class="brand"><i>🏆</i><div><b>Call Pilots Operations Portal</b><small>' + esc(ME.isSuper ? "Super admin" : ME.isAdmin ? "Admin · " + ((ME.teams || []).join(", ") || "no team") : "Handler" + (ME.team ? " · " + ME.team : "")) + '</small></div></div>' +
       PAGES.filter(function (p) { return !p[3] || ME.isAdmin; }).map(function (p) { return '<a href="#' + p[0] + '" class="' + (p[0] === cur ? "on" : "") + '"><span>' + p[1] + '</span>' + (p[0] === "calls" && ME.isAdmin ? "Calls" : p[2]) + '</a>'; }).join("") +
       '<div class="foot">' + esc(ME.name) + (ME.team ? " · " + esc(ME.team) : "") + '<br><a href="/">Home</a> · <a href="/?signout=1">Sign out</a></div></nav>';
-    $root.innerHTML = '<div class="app">' + nav + '<main id="main"></main></div>';
+    var sw = ME.realAdmin ? '<div class="topbar"><span class="muted" style="font-size:12px">View</span><div class="seg" role="group" aria-label="View">' +
+      '<button data-view="admin" aria-pressed="' + (STATE.view === "admin") + '">' + (ME.isSuper ? "Super admin view" : "Admin view") + '</button>' +
+      '<button data-view="mine" aria-pressed="' + (STATE.view === "mine") + '"' + (ME.memberId ? '' : ' disabled title="Your login is not in the Tool Drive list yet (People: give yourself a Call Pilots team)"') + '>My view</button></div></div>' : '';
+    $root.innerHTML = '<div class="app">' + nav + '<div class="col">' + sw + '<main id="main"></main></div></div>';
+    Array.prototype.forEach.call(document.querySelectorAll("[data-view]"), function (b) {
+      b.onclick = function () {
+        STATE.view = b.dataset.view; ME.isAdmin = ME.realAdmin && STATE.view === "admin";
+        STATE.member = ""; STATE.team = ""; CF = "";
+        try { localStorage.setItem("cp_view", STATE.view); } catch (e) {}
+        if (!ME.isAdmin && (location.hash === "#add" || location.hash === "#assign")) location.hash = "#calls"; else route();
+      };
+    });
     ({ dashboard: pDashboard, incentives: pIncentives, calls: pCalls, add: pAdd, assign: pAssign })[cur]();
     window.scrollTo(0, 0);
   }
@@ -454,7 +471,10 @@ var CORE = (function () {
     var f = function (id, k) { var e = document.getElementById(id); if (e) e.onchange = function () { STATE[k] = e.value; if (k === "team") STATE.member = ""; redraw(); }; };
     f("f_month", "month"); f("f_team", "team"); f("f_member", "member");
   }
-  var scopeArgs = function () { return { p_month: STATE.month + "-01", p_member: STATE.member ? Number(STATE.member) : null, p_team: STATE.team || null }; };
+  var scopeArgs = function () {
+    if (ME.realAdmin && !ME.isAdmin) return { p_month: STATE.month + "-01", p_member: ME.memberId || -1, p_team: null };   // My view
+    return { p_month: STATE.month + "-01", p_member: STATE.member ? Number(STATE.member) : null, p_team: STATE.team || null };
+  };
 
   /* ---------------- 1. Dashboard ---------------- */
   function pDashboard() {
@@ -565,10 +585,10 @@ var CORE = (function () {
      Add Interviews and Assign Interviews. */
   var CF = "";   // admin filter: "" = all, "__un" = not assigned yet, or a member id
   function pCalls() {
-    var title = ME.isAdmin ? "Calls" : "My Calls";
+    var title = ME.isAdmin ? "Calls" : "My Calls";   // Admin view: everyone's calls; My view / handlers: own calls
     var sub = ME.isAdmin ? (ME.isSuper ? "All calls of every team" : "All calls of " + esc((ME.teams || []).join(", ") || "your team") + ", and calls nobody drives yet") : "Calls where you are the Tool Drive or Call Support";
     loading(title, sub);
-    var member = ME.isAdmin && CF && CF !== "__un" ? Number(CF) : null;
+    var member = ME.isAdmin ? (CF && CF !== "__un" ? Number(CF) : null) : (ME.realAdmin ? ME.memberId : null);
     Promise.all([rpc("cp_my_calls", { p_member: member }), ME.isAdmin ? members() : Promise.resolve([])]).then(guard(function (r) {
       var d = r[0], calls = d.calls;
       if (ME.isAdmin && CF === "__un") calls = calls.filter(function (c) { return !c.toolDriveMemberId && !c.toolDrive; });
@@ -581,14 +601,14 @@ var CORE = (function () {
       var h = head(title, sub, ctl + '<button id="c_r">Refresh</button>');
       if (!d.all && !d.memberId) h += '<div class="card"><div class="empty">' + (ME.isAdmin ? "This handler is not in your team." : "Your login is not linked to the Tool Drive list yet. Ask an admin to give you a Call Pilots team on People (home page).") + '</div></div>';
       else {
-        var un = d.all ? d.calls.filter(function (c) { return !c.toolDriveMemberId && !c.toolDrive && (c.group === "today" || c.group === "tomorrow"); }).length : 0;
+        var un = d.all ? d.calls.filter(function (c) { return !c.toolDriveMemberId && !c.toolDrive && (c.group === "today"); }).length : 0;
         var sec = function (key, label, hint) {
           var L = g[key];
           return '<div class="grp">' + label + ' <span class="pill' + (key === "notUpdated" && L.length ? " w" : "") + '">' + L.length + '</span>' + (hint ? '<small class="muted" style="font-weight:400">' + hint + '</small>' : '') + '</div>' +
             (L.length ? '<div class="calls">' + L.map(callCard).join("") + '</div>' : '<div class="muted" style="font-size:13px">Nothing here.</div>');
         };
-        if (un && CF !== "__un") h += '<div class="note">' + un + ' call' + (un === 1 ? "" : "s") + ' today or tomorrow ' + (un === 1 ? "has" : "have") + ' no Tool Drive yet. <a href="#assign">Assign Interviews</a></div>';
-        h += '<div class="card"><div class="cb">' + sec("today", "Today") + sec("tomorrow", "Tomorrow") + sec("week", "This week") +
+        if (un && CF !== "__un") h += '<div class="note">' + un + ' call' + (un === 1 ? "" : "s") + ' today ' + (un === 1 ? "has" : "have") + ' no Tool Drive yet. <a href="#assign">Assign Interviews</a></div>';
+        h += '<div class="card"><div class="cb">' + sec("today", "Today") +
           sec("notUpdated", "Past calls not updated", "Mark them Completed or Cancelled") + '</div></div>' +
           '<div class="note">Calls after midnight (before 6:00 AM) stay on the previous day\'s list, as in TTOP.</div>';
       }
