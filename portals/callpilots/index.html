@@ -16,6 +16,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 button{cursor:pointer;border:1px solid var(--line);background:#fff;border-radius:12px;padding:9px 14px;font-weight:600}
 button.p{background:var(--pri);border-color:var(--pri);color:#fff}button.d{color:var(--bad)}button:disabled{opacity:.5;cursor:default}
 button.sm{padding:6px 10px;font-size:12px;border-radius:10px}
+a.btnlink{display:inline-block;text-decoration:none;border:1px solid var(--line);background:#fff;border-radius:12px;padding:9px 14px;font-weight:600;color:var(--ink)}a.btnlink.p{background:var(--pri);border-color:var(--pri);color:#fff}
 input,select,textarea{border:1px solid var(--line);border-radius:12px;padding:9px 12px;background:#fff;min-width:0}
 textarea{width:100%;resize:vertical}
 a{color:var(--pri)}
@@ -427,7 +428,7 @@ var CORE = (function () {
     GEN++;
     var cur = page();
     var nav = '<nav class="side"><div class="brand"><i>🏆</i><div><b>Call Pilots Operations Portal</b><small>' + esc(ME.isSuper ? "Super admin" : ME.isAdmin ? "Admin · " + ((ME.teams || []).join(", ") || "no team") : "Handler" + (ME.team ? " · " + ME.team : "")) + '</small></div></div>' +
-      PAGES.filter(function (p) { return !p[3] || ME.isAdmin; }).map(function (p) { return '<a href="#' + p[0] + '" class="' + (p[0] === cur ? "on" : "") + '"><span>' + p[1] + '</span>' + p[2] + '</a>'; }).join("") +
+      PAGES.filter(function (p) { return !p[3] || ME.isAdmin; }).map(function (p) { return '<a href="#' + p[0] + '" class="' + (p[0] === cur ? "on" : "") + '"><span>' + p[1] + '</span>' + (p[0] === "calls" && ME.isAdmin ? "Calls" : p[2]) + '</a>'; }).join("") +
       '<div class="foot">' + esc(ME.name) + (ME.team ? " · " + esc(ME.team) : "") + '<br><a href="/">Home</a> · <a href="/?signout=1">Sign out</a></div></nav>';
     $root.innerHTML = '<div class="app">' + nav + '<main id="main"></main></div>';
     ({ dashboard: pDashboard, incentives: pIncentives, calls: pCalls, add: pAdd, assign: pAssign })[cur]();
@@ -558,37 +559,53 @@ var CORE = (function () {
     })).catch(guard(fail));
   }
 
-  /* ---------------- 3. My calls ---------------- */
+  /* ---------------- 3. My calls ----------------
+     Handler: their own calls. Admin: ALL calls of their team(s) plus calls nobody drives yet
+     (super admin: every call), filter by handler or "not assigned yet", and quick buttons to
+     Add Interviews and Assign Interviews. */
+  var CF = "";   // admin filter: "" = all, "__un" = not assigned yet, or a member id
   function pCalls() {
-    var title = "My Calls", sub = "Calls where you are the Tool Drive or Call Support";
+    var title = ME.isAdmin ? "Calls" : "My Calls";
+    var sub = ME.isAdmin ? (ME.isSuper ? "All calls of every team" : "All calls of " + esc((ME.teams || []).join(", ") || "your team") + ", and calls nobody drives yet") : "Calls where you are the Tool Drive or Call Support";
     loading(title, sub);
-    Promise.all([rpc("cp_my_calls", { p_member: ME.isAdmin && STATE.member ? Number(STATE.member) : null }), ME.isAdmin ? members() : Promise.resolve([])]).then(guard(function (r) {
-      var d = r[0], g = C.groupCalls(d.calls);
-      var ctl = ME.isAdmin ? '<select id="c_m" aria-label="Handler"><option value="">' + (ME.memberId ? "My calls" : "Choose a handler") + '</option>' +
-        r[1].filter(function (m) { return m.isCallPilot && isCpTeam(m.team); }).map(function (m) { return '<option value="' + m.id + '"' + (String(m.id) === String(STATE.member) ? " selected" : "") + '>' + esc(m.name) + (m.team ? " · " + esc(m.team) : "") + '</option>'; }).join("") + '</select>' : '';
+    var member = ME.isAdmin && CF && CF !== "__un" ? Number(CF) : null;
+    Promise.all([rpc("cp_my_calls", { p_member: member }), ME.isAdmin ? members() : Promise.resolve([])]).then(guard(function (r) {
+      var d = r[0], calls = d.calls;
+      if (ME.isAdmin && CF === "__un") calls = calls.filter(function (c) { return !c.toolDriveMemberId && !c.toolDrive; });
+      var g = C.groupCalls(calls);
+      var ctl = ME.isAdmin
+        ? '<select id="c_m" aria-label="Show"><option value="">All calls</option><option value="__un"' + (CF === "__un" ? " selected" : "") + '>Not assigned yet</option>' +
+          r[1].filter(function (m) { return m.isCallPilot && isCpTeam(m.team); }).map(function (m) { return '<option value="' + m.id + '"' + (String(m.id) === String(CF) ? " selected" : "") + '>' + esc(m.name) + (m.team ? " · " + esc(m.team) : "") + '</option>'; }).join("") + '</select>' +
+          '<a class="btnlink p" href="#add">＋ Add Interviews</a><a class="btnlink" href="#assign">⇄ Assign Interviews</a>'
+        : '';
       var h = head(title, sub, ctl + '<button id="c_r">Refresh</button>');
-      if (!d.memberId) h += '<div class="card"><div class="empty">' + (ME.isAdmin ? "Choose a handler to see their calls." : "Your login is not linked to a team member yet. Ask an admin to add your email on TTOP's Team page.") + '</div></div>';
+      if (!d.all && !d.memberId) h += '<div class="card"><div class="empty">' + (ME.isAdmin ? "This handler is not in your team." : "Your login is not linked to the Tool Drive list yet. Ask an admin to give you a Call Pilots team on People (home page).") + '</div></div>';
       else {
+        var un = d.all ? d.calls.filter(function (c) { return !c.toolDriveMemberId && !c.toolDrive && (c.group === "today" || c.group === "tomorrow"); }).length : 0;
         var sec = function (key, label, hint) {
           var L = g[key];
           return '<div class="grp">' + label + ' <span class="pill' + (key === "notUpdated" && L.length ? " w" : "") + '">' + L.length + '</span>' + (hint ? '<small class="muted" style="font-weight:400">' + hint + '</small>' : '') + '</div>' +
             (L.length ? '<div class="calls">' + L.map(callCard).join("") + '</div>' : '<div class="muted" style="font-size:13px">Nothing here.</div>');
         };
-        h += '<div class="card"><div class="cb">' + sec("today", "Today", C.listToday() === d.today ? "" : "") + sec("tomorrow", "Tomorrow") + sec("week", "This week") +
+        if (un && CF !== "__un") h += '<div class="note">' + un + ' call' + (un === 1 ? "" : "s") + ' today or tomorrow ' + (un === 1 ? "has" : "have") + ' no Tool Drive yet. <a href="#assign">Assign Interviews</a></div>';
+        h += '<div class="card"><div class="cb">' + sec("today", "Today") + sec("tomorrow", "Tomorrow") + sec("week", "This week") +
           sec("notUpdated", "Past calls not updated", "Mark them Completed or Cancelled") + '</div></div>' +
           '<div class="note">Calls after midnight (before 6:00 AM) stay on the previous day\'s list, as in TTOP.</div>';
       }
       main().innerHTML = h;
       document.getElementById("c_r").onclick = pCalls;
-      var cm = document.getElementById("c_m"); if (cm) cm.onchange = function () { STATE.member = cm.value; pCalls(); };
+      var cm = document.getElementById("c_m"); if (cm) cm.onchange = function () { CF = cm.value; pCalls(); };
       Array.prototype.forEach.call(main().querySelectorAll("[data-a]"), function (b) { b.onclick = function () { callAction(Number(b.dataset.id), b.dataset.a, d.calls.find(function (x) { return x.id === Number(b.dataset.id); })); }; });
     })).catch(guard(fail));
   }
   function callCard(c) {
     var mine = c.myPart === "Tool Drive" || ME.isAdmin, open = c.status === "Scheduled" || c.status === "Date Pending", past = c.date <= C.listToday();
+    var who = c.myPart === "All"
+      ? (c.toolDrive ? 'Tool Drive: <b>' + esc(c.toolDrive) + '</b>' + (c.team && isCpTeam(c.team) ? ' · ' + esc(c.team) : '') : '<span class="pill w">Not assigned yet</span>')
+      : esc(c.myPart) + (c.myPart !== "Tool Drive" && c.toolDrive ? ' · Tool Drive: ' + esc(c.toolDrive) : '');
     return '<div class="call"><div class="top"><div><div class="t">' + C.time12(c.time) + ' <small class="muted" style="font-weight:500">' + esc(c.date) + ' · ' + nf(c.duration) + ' min</small></div>' +
       '<div class="who">' + esc(c.candidate) + '</div><div class="meta">' + esc(c.client) + (c.role ? ' · ' + esc(c.role) : '') + ' · ' + esc(c.round) + ' · ' + esc(c.type) + '</div>' +
-      '<div class="meta">' + esc(c.myPart) + (c.myPart !== "Tool Drive" && c.toolDrive ? ' · Tool Drive: ' + esc(c.toolDrive) : '') + (c.support ? ' · Support: ' + esc(c.support) : '') + '</div></div>' +
+      '<div class="meta">' + who + (c.support ? ' · Support: ' + esc(c.support) : '') + '</div></div>' +
       '<div style="text-align:right"><span class="pill ' + esc(c.status.split(" ")[0]) + '">' + esc(c.status) + '</span>' + (c.rescheduleRequested ? '<div style="margin-top:4px"><span class="pill w">Reschedule requested</span></div>' : '') + '</div></div>' +
       (c.notes ? '<div class="meta">' + esc(c.notes) + '</div>' : '') + (c.feedback ? '<div class="fb">' + esc(c.feedback) + '</div>' : '') +
       '<div class="act">' +
@@ -671,9 +688,9 @@ var CORE = (function () {
         var canRs = !done && s.result === "review_duplicate";
         return '<tr><td data-l="Date">' + esc(x.date) + '</td><td data-l="Time">' + C.time12(x.time) + '</td><td data-l="Candidate"><b>' + esc(x.cand) + '</b>' + (x.loc ? ' <small class="muted">(' + esc(x.loc) + ')</small>' : '') + '</td>' +
           '<td data-l="Role">' + esc(x.role || "—") + '</td><td data-l="Client">' + esc(x.client) + '</td><td data-l="Round">' + esc(x.round) + (x.roundGiven ? '' : ' <small class="muted">(not in line)</small>') + (x.tech ? ' <span class="pill">Technical</span>' : '') + '</td>' +
-          '<td data-l="POC">' + esc(x.poc || "—") + '</td><td data-l="Result"><span class="pill ' + R[1] + '">' + esc(R[0]) + '</span>' + (s.newRole ? ' <span class="pill w" title="This role has not been used on any interview yet. Check the title.">New role</span>' : '') + (s.message ? '<div class="muted" style="font-size:12px">' + esc(s.message) + '</div>' : '') + (x.notes ? '<div class="muted" style="font-size:12px">' + esc(x.notes) + '</div>' : '') + '</td>' +
+          '<td data-l="POC">' + esc(x.poc || "—") + '</td><td data-l="Result"><span class="pill ' + R[1] + '">' + esc(R[0]) + '</span>' + (s.newRole ? ' <span class="pill w" title="This role has not been used on any interview yet. Check the title.">New role</span>' : '') + (s.newClient ? ' <span class="pill w" title="Added as a new client; a Check row goes to TTOP Import Review">New client</span>' : '') + (s.message ? '<div class="muted" style="font-size:12px">' + esc(s.message) + '</div>' : '') + (x.notes ? '<div class="muted" style="font-size:12px">' + esc(x.notes) + '</div>' : '') + '</td>' +
           '<td>' + (canRs ? '<button class="sm" data-rs="' + i + '">It is a reschedule</button>' : x.mode === "reschedule" && !done ? '<button class="sm" data-un="' + i + '">Not a reschedule</button>' : '') + '</td></tr>';
-      }).join("") + '</tbody></table></div><div class="cb muted" style="font-size:12px">Same rules as TTOP: a new candidate or client, and a second line for a round that already exists, wait on TTOP\'s Import Review until someone checks them. A new role is only tagged “New role” (check the title); it does not stop the import. An identical interview is never added twice, so importing the same list again adds nothing. Lines with no time are saved as Date Pending.</div></div>';
+      }).join("") + '</tbody></table></div><div class="cb muted" style="font-size:12px">Same rules as TTOP: only a new candidate, and a second line for a round that already exists, wait on TTOP\'s Import Review. A client not in the portal is matched to a similar one first; if it is really new it is added (tag “New client”) and a Check row on Import Review lets someone confirm it. A new role is only tagged “New role”. An identical interview is never added twice, so importing the same list again adds nothing. Lines with no time are saved as Date Pending.</div></div>';
     el.innerHTML = h;
     var go = document.getElementById("a_go");
     if (go) go.onclick = function () {

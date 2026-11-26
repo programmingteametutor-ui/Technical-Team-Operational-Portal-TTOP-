@@ -63,6 +63,18 @@ function candFind(name, pool, hint) {
   if (m.length > 1) { const e = m.filter(c => strip(c.name).split(' ')[0] == P[0]); if (e.length == 1) m = e }
   return m.length == 1 ? { c: m[0] } : m.length ? { amb: m } : {};
 }
+/* An existing role that looks like the same title written differently ("Java developer" / "Java Developer ",
+   "Data Analyst" / "Data Anaylst"): used only to suggest a correction on Import Review. */
+function similarRole(role, roles) {
+  const k = rn(role); if (!k) return '';
+  const ks = k.replace(/[^a-z0-9]/g, '');
+  for (const r of roles) {
+    const q = rn(r); if (!q || q == k) continue;
+    const qs = q.replace(/[^a-z0-9]/g, '');
+    if (qs == ks || (ks.length >= 6 && qs.length >= 6 && lev(qs, ks) <= 2)) return String(r).trim();
+  }
+  return '';
+}
 function clientCanon(name, list) {
   const n = (name || '').trim(), k = ckey(n); if (!k) return n;
   return list.find(c => nm(c) == nm(n)) || list.find(c => ckey(c) == k || dbKey(c) == dbKey(n)) || (k.length >= 6 && list.find(c => { const q = ckey(c); return q.length >= 6 && lev(q, k) <= 1 })) || n;
@@ -159,6 +171,7 @@ async function runSync(dry) {
   const tName = id => (team.find(t => t.id == id) || {}).name || '';
   const C = cands.map(c => ({ ...c, pocName: tName(c.technical_poc_id) })), CL = cls.slice(), I = ivs.map(x => ({ ...x, interview_time: (x.interview_time || '').slice(0, 5) }));
   const seen = new Set(seenRows.map(x => x.key)), rows = parseDoc(text, team, CL.map(c => c.name), today);
+  const roleList = [...new Set(I.map(x => String(x.role || '').trim()).filter(Boolean))];
   const pfind = n => n && team.find(t => nm(t.name) == nm(n) || nm(t.name.split(' ')[0]) == nm(n));
   let fake = -1; const S = { lines: rows.length, added: 0, updated: 0, rescheduled: 0, already: 0, newCands: 0, newClients: 0, pending: 0, review: 0, held: 0, old: 0, failed: 0, errors: [] };
   const review = [], seenAdd = [], plans = [];
@@ -179,11 +192,17 @@ async function runSync(dry) {
     // VERIFY FIRST: a candidate who is not in the portal is NOT created automatically.
     // The line waits on Import Review ("Waiting for approval") until someone checks the name and adds it.
     if (!c) { rv(row, 'newc', { hold: '1', client: clientCanon(row.client, CL.map(x => x.name)) }); S.held++; seen.add(key); seenAdd.push({ key, action: 'held' }); continue }
-    // client: VERIFY FIRST, like a candidate. A client that is not in the portal is NOT created
-    // automatically; the line waits on Import Review until someone checks the name and adds it.
-    const cn = clientCanon(row.client, CL.map(x => x.name)); const cl = CL.find(x => x.name == cn);
-    if (!cl) { rv(row, 'newcl', { hold: '1', client: cn }); S.held++; S.newClients++; seen.add(key); seenAdd.push({ key, action: 'held' }); continue }
-    // role: a new job title does not stop the line (roles are job titles; most are new); the Verify dialog flags it
+    // client: matched to an existing client first (same name, "Inc/Ltd" ignored, small spelling slips).
+    // A client that is still new is created and the interview is added; Import Review then shows a
+    // "Check client" row (with similar clients) so someone can confirm it. Only a new candidate waits.
+    const cn = clientCanon(row.client, CL.map(x => x.name)); let cl = CL.find(x => x.name == cn), newClient = false;
+    if (!cl) {
+      if (dry) cl = { id: fake--, name: cn };
+      else { try { cl = (await rest('clients', { method: 'POST', body: { name: clean(cn) }, prefer: 'return=representation' }))[0] } catch (e) { const f = (await all('clients', 'id,name')).find(x => nm(x.name) == nm(cn) || ckey(x.name) == ckey(cn)); if (!f) { S.failed++; S.errors.push(cn + ': ' + e.message); continue } cl = f } }
+      CL.push(cl); S.newClients++; newClient = true;
+    }
+    // role: never stops the line; a role that looks like a misspelt existing one gets a "Check role" row
+    const simRole = similarRole(row.role, roleList);
     const noT = !row.time, mine = I.filter(x => x.candidate_id == c.id && x.client_id == cl.id && x.round == row.round);
     // already in the portal in any status (so a cancelled or deleted interview is not brought back)
     { const ex = mine.find(x => noT ? !x.interview_date : x.interview_date == row.date && x.interview_time == row.time); if (ex) { S.already++; seen.add(key); seenAdd.push({ key, action: 'already', interview_id: ex.id > 0 ? ex.id : null }); continue } }
@@ -208,7 +227,8 @@ async function runSync(dry) {
     };
     const ph = { id: 0, candidate_id: c.id, client_id: cl.id, role: row.role, round: row.round, interview_date: body.interview_date, interview_time: body.interview_time || '', interview_status: status };
     I.push(ph); seen.add(key);
-    plans.push({ row, key, body, ph, rs });
+    plans.push({ row, key, body, ph, rs, newClient, simRole, clientName: cl.name });
+    if (row.role && !roleList.includes(row.role)) roleList.push(row.role);
   }
 
   // insert new interviews in batches (falls back to one at a time if a batch is refused)
@@ -216,6 +236,9 @@ async function runSync(dry) {
     p.ph.id = id; S.added++; if (p.rs) { S.rescheduled++ } if (!p.body.interview_date) S.pending++;
     seenAdd.push({ key: p.key, action: p.rs ? 'rescheduled' : 'added', interview_id: id > 0 ? id : null });
     if (!p.body.interview_date) rv(p.row, 'time', { iid: id });
+    // added, but worth a look: a new client, or a role that looks like a misspelt existing one
+    if (p.newClient || p.simRole) rv(p.row, 'chk', { iid: id, client: p.clientName,
+      msg: [p.newClient ? 'New client “' + p.clientName + '” was added' : '', p.simRole ? 'Role “' + p.row.role + '” looks like “' + p.simRole + '”' : ''].filter(Boolean).join('. ') });
   };
   // rows marked technical carry two extra columns: keep them together so batches have matching keys
   plans.sort((a, b) => (a.row.tech ? 1 : 0) - (b.row.tech ? 1 : 0));

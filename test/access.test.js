@@ -103,3 +103,23 @@ test('Call Pilots shows only Pradeep Anna and HYD; other teams are "Other" Tool 
   assert.doesNotMatch(page, /Development/);
   assert.match(page, /Other Tool Drive people/);
 });
+
+test('only a new candidate waits; Call Pilots admins see all calls of their teams', () => {
+  const sql = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '20261126000002_callpilots_checks_allcalls.sql'), 'utf8');
+  const body = (f) => { const i = sql.indexOf('function public.' + f + '('); assert.ok(i >= 0, f); return sql.slice(i, sql.indexOf('end $$', i)); };
+  const imp = body('cp_import_interviews');
+  assert.doesNotMatch(imp, /kind := 'newcl'/);                         // a new client never holds a line
+  assert.match(imp, /insert into clients \(name\) values \(v_client\)/);
+  assert.match(imp, /'kind', 'chk'/);                                   // ...it gets a non-blocking Check row
+  assert.match(imp, /'hold', ''/);
+  const mc = body('cp_my_calls');
+  assert.match(mc, /all_calls := adm and p_member is null/);
+  assert.match(mc, /sup or i\.tool_drive_member_id is null or td\.call_pilot_team = any\(teams\)/);   // team admins: their teams + unassigned
+  assert.match(mc, /else i\.tool_drive_member_id = me or i\.call_support_1 = me or i\.call_support_2 = me end/);   // handlers: own only
+  const page = fs.readFileSync(path.join(__dirname, '..', 'portals', 'callpilots', 'index.html'), 'utf8');
+  assert.match(page, /href="#add">＋ Add Interviews/);
+  assert.match(page, /href="#assign">⇄ Assign Interviews/);
+  const ttop = fs.readFileSync(path.join(__dirname, '..', 'portals', 'ttop', 'index.html'), 'utf8');
+  assert.doesNotMatch(ttop, /rv1\(r,'newcl'/);
+  assert.match(ttop, /rv1\(r,'chk',/);
+});
