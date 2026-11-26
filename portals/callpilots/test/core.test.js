@@ -6,7 +6,7 @@ const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 const CORE = new Function(html.slice(html.indexOf('/* core:start */'), html.indexOf('/* core:end */')) + '\nreturn CORE;')();
 const MIG = path.join(__dirname, '..', '..', '..', 'supabase', 'migrations');
 // every Call Pilots migration, in order (later files replace functions of earlier ones)
-const SQL = fs.readdirSync(MIG).filter(f => /^2026112500000\d_/.test(f)).sort().map(f => fs.readFileSync(path.join(MIG, f), 'utf8')).join('\n');
+const SQL = fs.readdirSync(MIG).filter(f => /^202611(25|26)\d{6}_/.test(f)).sort().map(f => fs.readFileSync(path.join(MIG, f), 'utf8')).join('\n');
 
 /* ---------- money, months, IST list day ---------- */
 test('Indian Rupee format uses lakh grouping', () => {
@@ -161,7 +161,7 @@ test('the page calls only cp_* functions, each defined in the migration and gran
   for (const f of used) {
     assert.match(f, /^cp_/);
     assert.match(SQL, new RegExp('create or replace function public\\.' + f + '\\('), f + ' is defined');
-    assert.match(SQL, new RegExp("'" + f + '\\('), f + ' is in the grant list');
+    assert.ok(SQL.includes("'" + f + '(') || new RegExp('grant execute on function [^;]*public\\.' + f + '\\(').test(SQL), f + ' is in the grant list');
   }
   assert.doesNotMatch(SQL, /grant[^;]*to\s+anon/i);
 });

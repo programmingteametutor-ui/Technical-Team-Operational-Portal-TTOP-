@@ -75,6 +75,8 @@ th{font-size:12px;color:var(--mute);font-weight:600;white-space:nowrap}td.num,th
 dialog{border:0;border-radius:18px;padding:20px;max-width:min(520px,94vw);width:100%;box-shadow:0 20px 60px rgba(0,0,0,.25)}
 dialog::backdrop{background:rgba(15,23,42,.45)}dialog h3{margin:0 0 10px}dialog label{display:block;font-weight:600;font-size:12px;margin:10px 0 4px}
 dialog .row{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+dialog .g2{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}dialog .g2 input,dialog .g2 select,dialog input,dialog select,dialog textarea{width:100%;box-sizing:border-box}
+dialog.wide{max-width:min(680px,96vw);max-height:92vh;overflow:auto}@media (max-width:560px){dialog .g2{grid-template-columns:1fr}}
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#0f172a;color:#fff;padding:10px 16px;border-radius:12px;z-index:50;max-width:92vw;box-shadow:var(--sh)}
 .center{min-height:100vh;display:grid;place-items:center;padding:20px}.center .card{max-width:460px;padding:24px}
 .foot2{display:flex;justify-content:space-between;color:var(--mute);font-size:11px;margin-top:8px;gap:10px;flex-wrap:wrap}
@@ -639,9 +641,13 @@ var CORE = (function () {
       (mine && open ? '<button class="sm d" data-a="cancel" data-id="' + c.id + '">Cancelled</button>' : '') +
       (mine && open && !c.rescheduleRequested ? '<button class="sm" data-a="request_reschedule" data-id="' + c.id + '">Request reschedule</button>' : '') +
       (ME.isAdmin && c.rescheduleRequested ? '<button class="sm" data-a="clear_reschedule" data-id="' + c.id + '">Clear reschedule request</button>' : '') +
-      '<button class="sm" data-a="feedback" data-id="' + c.id + '">Add feedback</button></div></div>';
+      '<button class="sm" data-a="feedback" data-id="' + c.id + '">Add feedback</button>' +
+      (ME.isAdmin || c.myPart === "Tool Drive" ? '<button class="sm" data-a="edit" data-id="' + c.id + '">✎ Edit</button>' : '') +
+      (ME.isAdmin ? '<button class="sm d" data-a="delete" data-id="' + c.id + '">Delete</button>' : '') + '</div></div>';
   }
   function callAction(id, action, c) {
+    if (action === "edit") return editCall(c);
+    if (action === "delete") return deleteCall(c);
     var L = { complete: ["Mark as Completed", "Feedback (optional)", false], cancel: ["Mark as Cancelled", "Reason (optional)", false],
       request_reschedule: ["Request a reschedule", "New date / time or reason", true], clear_reschedule: ["Clear the reschedule request", "", false],
       feedback: ["Add feedback", "Feedback", true] }[action];
@@ -658,6 +664,78 @@ var CORE = (function () {
       this.disabled = true;
       rpc("cp_update_call", { p_id: id, p_action: action, p_note: note || null }).then(function () { close(); toast("Saved"); pCalls(); })
         .catch(function (e) { d.querySelector("#d_s").disabled = false; d.querySelector("#d_e").textContent = e.message; });
+    };
+  }
+
+  /* Edit a call. Admin: everything (candidate, client, Tool Drive, Call Support too).
+     Handler: their own calls (date, time, duration, round, type, role, status, notes, feedback). */
+  var TYPES = ["Recruiter","Technical","Hiring Manager","Leadership","Director","Coding","System Design","Assessment","Presentation","Cultural Fit","Onsite"];
+  var ROUNDS = ["Round 1","Round 2","Round 3","Round 4","Round 5","Final","Loop"];
+  var STATUSES = ["Scheduled","Completed","Cancelled","Date Pending"];
+  function editCall(c) {
+    if (!c) return;
+    (ME.isAdmin ? members() : Promise.resolve([])).then(function (mem) {
+      var opt = function (list, v) { return list.map(function (x) { return '<option' + (x === v ? " selected" : "") + '>' + esc(x) + '</option>'; }).join(""); };
+      var who = function (id, v, label) {
+        return '<select id="' + id + '"><option value="">' + label + '</option>' + mem.map(function (m) {
+          return '<option value="' + m.id + '"' + (String(m.id) === String(v) ? " selected" : "") + '>' + esc(m.name) + (m.team ? " · " + esc(m.team) : "") + '</option>'; }).join("") + '</select>';
+      };
+      var rounds = ROUNDS.indexOf(c.round) >= 0 ? ROUNDS : ROUNDS.concat([c.round]);
+      var sts = STATUSES.indexOf(c.status) >= 0 ? STATUSES : [c.status].concat(STATUSES);
+      var d = document.createElement("dialog"); d.className = "wide";
+      d.innerHTML = '<h3>Edit call</h3><p class="muted" style="margin:0">' + esc(c.candidate + " · " + c.client + " · " + c.round) + '</p>' +
+        (ME.isAdmin ? '<div class="g2"><div><label for="e_cand">Candidate</label><input id="e_cand" maxlength="120" value="' + esc(c.candidate) + '"></div>' +
+          '<div><label for="e_client">Client</label><input id="e_client" maxlength="120" value="' + esc(c.client) + '"></div></div>' : '') +
+        '<div class="g2"><div><label for="e_date">Date</label><input type="date" id="e_date" value="' + esc(c.date || "") + '"></div>' +
+        '<div><label for="e_time">Time (IST)</label><input type="time" id="e_time" value="' + esc(c.time || "") + '"></div>' +
+        '<div><label for="e_round">Round</label><select id="e_round">' + opt(rounds, c.round) + '</select></div>' +
+        '<div><label for="e_type">Type</label><select id="e_type">' + opt(TYPES.indexOf(c.type) >= 0 ? TYPES : TYPES.concat([c.type]), c.type) + '</select></div>' +
+        '<div><label for="e_dur">Duration (minutes)</label><input type="number" id="e_dur" min="5" max="600" step="5" value="' + esc(c.duration || 60) + '"></div>' +
+        '<div><label for="e_status">Status</label><select id="e_status">' + opt(sts, c.status) + '</select></div></div>' +
+        '<label for="e_role">Role</label><input id="e_role" maxlength="160" value="' + esc(c.role || "") + '">' +
+        (ME.isAdmin ? '<div class="g2"><div><label for="e_td">Tool Drive</label>' + who("e_td", c.toolDriveMemberId, "Not assigned") + '</div><div></div>' +
+          '<div><label for="e_s1">Call Support 1</label>' + who("e_s1", c.support1, "None") + '</div>' +
+          '<div><label for="e_s2">Call Support 2</label>' + who("e_s2", c.support2, "None") + '</div></div>' : '') +
+        '<label for="e_notes">Notes</label><textarea id="e_notes" rows="2" maxlength="1000">' + esc(c.notes || "") + '</textarea>' +
+        '<label for="e_fb">Feedback</label><textarea id="e_fb" rows="4" maxlength="4000">' + esc(c.feedback || "") + '</textarea>' +
+        '<p class="err" id="d_e"></p><div class="row"><button id="d_c">Cancel</button><button class="p" id="d_s">Save changes</button></div>';
+      document.body.appendChild(d); d.showModal();
+      var close = function () { d.close(); d.remove(); };
+      var v = function (id) { var el = d.querySelector("#" + id); return el ? el.value.trim() : null; };
+      d.querySelector("#d_c").onclick = close;
+      d.querySelector("#d_s").onclick = function () {
+        var f = {}, put = function (k, nv, ov) { if (nv !== null && String(nv) !== String(ov == null ? "" : ov)) f[k] = nv; };
+        put("date", v("e_date"), c.date); put("time", v("e_time"), c.time); put("duration", v("e_dur"), c.duration);
+        put("round", v("e_round"), c.round); put("type", v("e_type"), c.type); put("status", v("e_status"), c.status);
+        put("role", v("e_role"), c.role); put("notes", v("e_notes"), c.notes); put("feedback", d.querySelector("#e_fb").value.replace(/\s+$/, ""), c.feedback);
+        if (ME.isAdmin) {
+          put("candidate", v("e_cand"), c.candidate); put("client", v("e_client"), c.client);
+          put("toolDriveMemberId", v("e_td"), c.toolDriveMemberId); put("support1", v("e_s1"), c.support1); put("support2", v("e_s2"), c.support2);
+        }
+        if (!Object.keys(f).length) { close(); return; }
+        if ((f.status === "Scheduled" || f.status === "Completed" || (!f.status && c.status !== "Date Pending" && c.status !== "Cancelled")) && (!v("e_date") || !v("e_time"))) {
+          d.querySelector("#d_e").textContent = "Give the date and time, or set the status to Date Pending."; return;
+        }
+        var b = this; b.disabled = true;
+        rpc("cp_edit_call", { p_id: c.id, p_fields: f }).then(function () { close(); toast("Call updated"); pCalls(); })
+          .catch(function (e) { b.disabled = false; d.querySelector("#d_e").textContent = e.message; });
+      };
+    }).catch(guard(fail));
+  }
+  function deleteCall(c) {
+    if (!c) return;
+    var d = document.createElement("dialog");
+    d.innerHTML = '<h3>Delete this call?</h3><p style="margin:0"><b>' + esc(c.candidate) + '</b> · ' + esc(c.client) + ' · ' + esc(c.round) + '<br><span class="muted">' + esc(c.date || "No date") + ' · ' + C.time12(c.time) + ' · ' + esc(c.status) + '</span></p>' +
+      '<p class="muted" style="font-size:13px">The interview is removed from TTOP and Call Pilots. Unpaid incentives of this call are removed too. This cannot be undone (the activity log keeps a record).</p>' +
+      '<label for="d_n">Reason (optional)</label><input id="d_n" maxlength="200"><p class="err" id="d_e"></p>' +
+      '<div class="row"><button id="d_c">Keep it</button><button class="d" id="d_s">Delete call</button></div>';
+    document.body.appendChild(d); d.showModal();
+    var close = function () { d.close(); d.remove(); };
+    d.querySelector("#d_c").onclick = close;
+    d.querySelector("#d_s").onclick = function () {
+      var b = this; b.disabled = true;
+      rpc("cp_delete_call", { p_id: c.id, p_reason: d.querySelector("#d_n").value.trim() || null }).then(function () { close(); toast("Call deleted"); pCalls(); })
+        .catch(function (e) { b.disabled = false; d.querySelector("#d_e").textContent = e.message; });
     };
   }
 

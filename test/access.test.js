@@ -158,3 +158,27 @@ test('team board roster: linked or added in both portals, never a shared first n
   assert.ok(sql.includes('if nfit = 1 then'));                                                                                    // only when exactly one fits
   assert.ok(sql.includes("btrim(coalesce(tm.tool_drive_alias, ''))"));                                                            // alias in matching
 });
+
+test('Call Pilots edit and delete: admins edit everything and delete, handlers edit only their own calls', () => {
+  const sql = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '20261126000005_callpilots_edit_delete.sql'), 'utf8');
+  const body = (f) => { const i = sql.indexOf('function public.' + f + '('); assert.ok(i >= 0, f); return sql.slice(i, sql.indexOf('end $$', i)); };
+  const ed = body('cp_edit_call');
+  assert.match(ed, /if not public\.cp_call_in_admin_scope\(i\.tool_drive_member_id\) then/);              // admin: own teams only
+  assert.match(ed, /elsif me is null or i\.tool_drive_member_id is distinct from me then/);                  // handler: own calls only
+  assert.match(ed, /Only an admin can change the candidate, client, Tool Drive or Call Support/);
+  assert.match(ed, /A call in the future cannot be marked Completed/);
+  assert.match(ed, /exception when unique_violation/);
+  const del = body('cp_delete_call');
+  assert.match(del, /perform public\.cp_require\(true\)/);                                                   // admins only
+  assert.match(del, /cp_call_in_admin_scope/);
+  assert.match(del, /deleted call/);                                                                         // logged
+  assert.match(sql, /revoke all on function public\.cp_call_in_admin_scope\(bigint\) from public, anon, authenticated/);
+  const mc = body('cp_my_calls');
+  assert.match(mc, /'support1', i\.call_support_1, 'support2', i\.call_support_2/);
+  assert.match(mc, /else i\.tool_drive_member_id = me or i\.call_support_1 = me or i\.call_support_2 = me end/);
+  const page = fs.readFileSync(path.join(__dirname, '..', 'portals', 'callpilots', 'index.html'), 'utf8');
+  assert.match(page, /ME\.isAdmin \|\| c\.myPart === "Tool Drive" \? '<button class="sm" data-a="edit"/);
+  assert.match(page, /ME\.isAdmin \? '<button class="sm d" data-a="delete"/);
+  assert.match(page, /rpc\("cp_edit_call"/);
+  assert.match(page, /rpc\("cp_delete_call"/);
+});
