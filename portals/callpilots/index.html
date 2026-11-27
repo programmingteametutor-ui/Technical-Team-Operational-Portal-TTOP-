@@ -668,7 +668,7 @@ var CORE = (function () {
   }
 
   /* Edit a call. Admin: everything (candidate, client, Tool Drive, Call Support too).
-     Handler: their own calls (date, time, duration, round, type, role, status, notes, feedback). */
+     Handler: their own calls (role, status, notes, feedback); date, time, duration, round and type are fixed. */
   var TYPES = ["Recruiter","Technical","Hiring Manager","Leadership","Director","Coding","System Design","Assessment","Presentation","Cultural Fit","Onsite"];
   var ROUNDS = ["Round 1","Round 2","Round 3","Round 4","Round 5","Final","Loop"];
   var STATUSES = ["Scheduled","Completed","Cancelled","Date Pending"];
@@ -680,17 +680,18 @@ var CORE = (function () {
         return '<select id="' + id + '"><option value="">' + label + '</option>' + mem.map(function (m) {
           return '<option value="' + m.id + '"' + (String(m.id) === String(v) ? " selected" : "") + '>' + esc(m.name) + (m.team ? " · " + esc(m.team) : "") + '</option>'; }).join("") + '</select>';
       };
+      var fx = ME.isAdmin ? '' : ' disabled title="Fixed from the interview list. Ask an admin to change it."';   // handlers: Date, Time, Duration, Round, Type are fixed
       var rounds = ROUNDS.indexOf(c.round) >= 0 ? ROUNDS : ROUNDS.concat([c.round]);
       var sts = STATUSES.indexOf(c.status) >= 0 ? STATUSES : [c.status].concat(STATUSES);
       var d = document.createElement("dialog"); d.className = "wide";
       d.innerHTML = '<h3>Edit call</h3><p class="muted" style="margin:0">' + esc(c.candidate + " · " + c.client + " · " + c.round) + '</p>' +
         (ME.isAdmin ? '<div class="g2"><div><label for="e_cand">Candidate</label><input id="e_cand" maxlength="120" value="' + esc(c.candidate) + '"></div>' +
           '<div><label for="e_client">Client</label><input id="e_client" maxlength="120" value="' + esc(c.client) + '"></div></div>' : '') +
-        '<div class="g2"><div><label for="e_date">Date</label><input type="date" id="e_date" value="' + esc(c.date || "") + '"></div>' +
-        '<div><label for="e_time">Time (IST)</label><input type="time" id="e_time" value="' + esc(c.time || "") + '"></div>' +
-        '<div><label for="e_round">Round</label><select id="e_round">' + opt(rounds, c.round) + '</select></div>' +
-        '<div><label for="e_type">Type</label><select id="e_type">' + opt(TYPES.indexOf(c.type) >= 0 ? TYPES : TYPES.concat([c.type]), c.type) + '</select></div>' +
-        '<div><label for="e_dur">Duration (minutes)</label><input type="number" id="e_dur" min="5" max="600" step="5" value="' + esc(c.duration || 60) + '"></div>' +
+        '<div class="g2"><div><label for="e_date">Date</label><input type="date" id="e_date" value="' + esc(c.date || "") + '"' + fx + '></div>' +
+        '<div><label for="e_time">Time (IST)</label><input type="time" id="e_time" value="' + esc(c.time || "") + '"' + fx + '></div>' +
+        '<div><label for="e_round">Round</label><select id="e_round"' + fx + '>' + opt(rounds, c.round) + '</select></div>' +
+        '<div><label for="e_type">Type</label><select id="e_type"' + fx + '>' + opt(TYPES.indexOf(c.type) >= 0 ? TYPES : TYPES.concat([c.type]), c.type) + '</select></div>' +
+        '<div><label for="e_dur">Duration (minutes)</label><input type="number" id="e_dur" min="5" max="600" step="5" value="' + esc(c.duration || 60) + '"' + fx + '></div>' +
         '<div><label for="e_status">Status</label><select id="e_status">' + opt(sts, c.status) + '</select></div></div>' +
         '<label for="e_role">Role</label><input id="e_role" maxlength="160" value="' + esc(c.role || "") + '">' +
         (ME.isAdmin ? '<div class="g2"><div><label for="e_td">Tool Drive</label>' + who("e_td", c.toolDriveMemberId, "Not assigned") + '</div><div></div>' +
@@ -705,8 +706,11 @@ var CORE = (function () {
       d.querySelector("#d_c").onclick = close;
       d.querySelector("#d_s").onclick = function () {
         var f = {}, put = function (k, nv, ov) { if (nv !== null && String(nv) !== String(ov == null ? "" : ov)) f[k] = nv; };
-        put("date", v("e_date"), c.date); put("time", v("e_time"), c.time); put("duration", v("e_dur"), c.duration);
-        put("round", v("e_round"), c.round); put("type", v("e_type"), c.type); put("status", v("e_status"), c.status);
+        if (ME.isAdmin) {   // fixed for handlers: never sent (the database refuses them too)
+          put("date", v("e_date"), c.date); put("time", v("e_time"), c.time); put("duration", v("e_dur"), c.duration);
+          put("round", v("e_round"), c.round); put("type", v("e_type"), c.type);
+        }
+        put("status", v("e_status"), c.status);
         put("role", v("e_role"), c.role); put("notes", v("e_notes"), c.notes); put("feedback", d.querySelector("#e_fb").value.replace(/\s+$/, ""), c.feedback);
         if (ME.isAdmin) {
           put("candidate", v("e_cand"), c.candidate); put("client", v("e_client"), c.client);
@@ -781,7 +785,7 @@ var CORE = (function () {
     var p = ADD.parsed || { skipped: [], merged: 0 };
     var cnt = function (k) { return r.rows.filter(function (x) { return x.result === k; }).length; };
     var h = '<div class="card"><div class="ch"><div><b>' + (done ? "Imported" : "Preview") + '</b><small>' + ADD.rows.length + ' interviews read' + (p.merged ? ' · ' + p.merged + ' repeated lines merged' : '') +
-      ' · ' + (r.added + r.rescheduled) + (done ? ' added' : ' will be added') + ' · ' + r.skipped + ' skipped' + (r.failed ? ' · ' + r.failed + ' failed' : '') + (r.rows.filter(function (x) { return x.newRole; }).length ? ' · ' + r.rows.filter(function (x) { return x.newRole; }).length + ' with a new role' : '') + '</small></div>' +
+      ' · ' + (r.added + r.rescheduled) + (done ? ' added' : ' will be added') + ' · ' + r.skipped + ' skipped' + (r.failed ? ' · ' + r.failed + ' failed' : '') + (r.rows.filter(function (x) { return x.roleLeftEmpty; }).length ? ' · ' + r.rows.filter(function (x) { return x.roleLeftEmpty; }).length + ' with the role left empty' : '') + '</small></div>' +
       (done ? '<button id="a_n">New import</button>' : '<button class="p" id="a_go"' + ((r.added + r.rescheduled) ? '' : ' disabled') + '>Import all</button>') + '</div>' +
       (p.skipped.length ? '<div class="cb err" style="font-size:12px">' + p.skipped.length + ' numbered line' + (p.skipped.length === 1 ? " was" : "s were") + ' not recognised: ' + p.skipped.slice(0, 5).map(esc).join(" · ") + '</div>' : '') +
       '<div class="cb scroll"><table class="resp"><thead><tr><th>Date</th><th>Time</th><th>Candidate</th><th>Role</th><th>Client</th><th>Round</th><th>POC</th><th>Result</th><th></th></tr></thead><tbody>' +
@@ -789,10 +793,10 @@ var CORE = (function () {
         var s = r.rows[i] || {}, R = RES[s.result] || [s.result, "mute"];
         var canRs = !done && s.sameRound;
         return '<tr><td data-l="Date">' + esc(x.date) + '</td><td data-l="Time">' + C.time12(x.time) + '</td><td data-l="Candidate"><b>' + esc(x.cand) + '</b>' + (x.loc ? ' <small class="muted">(' + esc(x.loc) + ')</small>' : '') + '</td>' +
-          '<td data-l="Role">' + esc(x.role || "—") + '</td><td data-l="Client">' + esc(x.client) + '</td><td data-l="Round">' + esc(x.round) + (x.roundGiven ? '' : ' <small class="muted">(not in line)</small>') + (x.tech ? ' <span class="pill">Technical</span>' : '') + '</td>' +
-          '<td data-l="POC">' + esc(x.poc || "—") + '</td><td data-l="Result"><span class="pill ' + R[1] + '">' + esc(R[0]) + '</span>' + (s.newRole ? ' <span class="pill w" title="This role has not been used on any interview yet. Check the title.">New role</span>' : '') + (s.newCandidate ? ' <span class="pill w" title="Added as a new candidate (name only); the interview card in TTOP asks to check it">New candidate</span>' : '') + (s.newClient ? ' <span class="pill w" title="Added as a new client; the interview card in TTOP asks to check it">New client</span>' : '') + (s.sameRound ? ' <span class="pill w" title="This round is already in the portal. Added as a separate interview unless you press It is a reschedule">Same round exists</span>' : '') + (s.message ? '<div class="muted" style="font-size:12px">' + esc(s.message) + '</div>' : '') + (x.notes ? '<div class="muted" style="font-size:12px">' + esc(x.notes) + '</div>' : '') + '</td>' +
+          '<td data-l="Role">' + (s.roleLeftEmpty ? '<span class="muted">—</span>' : esc(x.role || "—")) + '</td><td data-l="Client">' + esc(x.client) + '</td><td data-l="Round">' + esc(x.round) + (x.roundGiven ? '' : ' <small class="muted">(not in line)</small>') + (x.tech ? ' <span class="pill">Technical</span>' : '') + '</td>' +
+          '<td data-l="POC">' + esc(x.poc || "—") + '</td><td data-l="Result"><span class="pill ' + R[1] + '">' + esc(R[0]) + '</span>' + (s.roleLeftEmpty ? ' <span class="pill w" title="The role in the list is not one already used on interviews, so it is left empty. The interview is still added.">Role left empty: ' + esc(s.roleLeftEmpty) + '</span>' : '') + (s.newCandidate ? ' <span class="pill w" title="Added as a new candidate (name only); the interview card in TTOP asks to check it">New candidate</span>' : '') + (s.newClient ? ' <span class="pill w" title="Added as a new client; the interview card in TTOP asks to check it">New client</span>' : '') + (s.sameRound ? ' <span class="pill w" title="This round is already in the portal. Added as a separate interview unless you press It is a reschedule">Same round exists</span>' : '') + (s.message ? '<div class="muted" style="font-size:12px">' + esc(s.message) + '</div>' : '') + (x.notes ? '<div class="muted" style="font-size:12px">' + esc(x.notes) + '</div>' : '') + '</td>' +
           '<td>' + (canRs ? '<button class="sm" data-rs="' + i + '">It is a reschedule</button>' : x.mode === "reschedule" && !done ? '<button class="sm" data-un="' + i + '">Not a reschedule</button>' : '') + '</td></tr>';
-      }).join("") + '</tbody></table></div><div class="cb muted" style="font-size:12px">Every interview is added directly to Interviews. A candidate or client that is not in the portal yet is created (tags “New candidate” / “New client”), and a round that already exists is added as a separate interview (tag “Same round exists”, or press It is a reschedule). The interview card in TTOP then asks to check them, with similar names suggested. An identical interview is never added twice, so importing the same list again adds nothing. Lines with no time are saved as Date Pending.</div></div>';
+      }).join("") + '</tbody></table></div><div class="cb muted" style="font-size:12px">Every interview is added directly to Interviews. A candidate or client that is not in the portal yet is created (tags “New candidate” / “New client”), and a round that already exists is added as a separate interview (tag “Same round exists”, or press It is a reschedule). The interview card in TTOP then asks to check them, with similar names suggested. An identical interview is never added twice, so importing the same list again adds nothing. A role that is not in the list (not used on any interview yet) is left empty and the interview is still added. Lines with no time are saved as Date Pending.</div></div>';
     el.innerHTML = h;
     var go = document.getElementById("a_go");
     if (go) go.onclick = function () {
